@@ -1,11 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"slices"
 	"strconv"
 )
 
@@ -88,6 +90,64 @@ func aggregateJson(agg map[string]map[interface{}][]int, flatten map[string]inte
 	}
 }
 
+type valueRefs struct {
+	value interface{}
+	refs  []int
+}
+
+type propRefs struct {
+	prop   string
+	values []valueRefs
+}
+
+func sortValues(values map[interface{}][]int) []valueRefs {
+	lessStr := func(a string, b interface{}) int {
+		switch v := b.(type) {
+		case string:
+			return cmp.Compare(a, v)
+		case float64:
+			return 1 // floats compared to strings will be treated as smaller
+		}
+		return 1 // b is most likely nil
+	}
+
+	lessFloat := func(a float64, b interface{}) int {
+		switch v := b.(type) {
+		case float64:
+			return cmp.Compare(a, v)
+		case string:
+			return -1 // floats compared to strings will be treated as smaller
+		}
+		return 1 // b is most likely nil
+	}
+
+	less := func(a, b interface{}) int {
+		/* Should return a negative number when a < b,
+		** a positive number when a > b
+		** and zero when a == b. */
+		switch v := a.(type) {
+		case string:
+			return lessStr(v, b)
+		case float64:
+			return lessFloat(v, b)
+		}
+		return -1 // a is most likely nil
+	}
+
+	keys := make([]interface{}, 0, len(values))
+	for k := range values {
+		keys = append(keys, k)
+	}
+
+	slices.SortFunc(keys, less)
+
+	sortedRefs := make([]valueRefs, 0, len(keys))
+	for _, key := range keys {
+		sortedRefs = append(sortedRefs, valueRefs{key, values[key]})
+	}
+	return sortedRefs
+}
+
 func main() {
 	dirPath := "./db"
 
@@ -100,5 +160,18 @@ func main() {
 		aggregateJson(agg, flatten, fileIdx)
 	}
 
-	fmt.Println(agg)
+	// todo sort props fn
+	properties := make([]string, 0, len(agg))
+	for p := range agg {
+		properties = append(properties, p)
+	}
+	slices.SortFunc(properties, cmp.Compare)
+
+	index := make([]propRefs, 0, len(properties))
+	for _, p := range properties {
+		values := sortValues(agg[p])
+		index = append(index, propRefs{p, values})
+	}
+
+	fmt.Println(index)
 }
