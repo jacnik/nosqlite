@@ -6,5 +6,6 @@
     "facebook": "https://facebook.com",
     "twitter": "https://twitter.com"
   },
-  "arr": [2, 3]
+  "arr": [2, 3],
+  "now null behaves": null
 }
