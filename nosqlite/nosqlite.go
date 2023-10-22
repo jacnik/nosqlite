@@ -23,36 +23,44 @@ const (
 	DEL separator = '\x7f'
 )
 
-type indexType byte
+type IndexEntryType byte
 
 const (
-	floatType indexType = 'f'
-	strType   indexType = 's'
-	nullType  indexType = 'n'
+	FloatType IndexEntryType = 'f'
+	StrType   IndexEntryType = 's'
+	NullType  IndexEntryType = 'n'
 )
 
-type valueRefs struct {
-	value jsonTypeValue
-	refs  []int
+type ValueRefs struct {
+	value interface{}
+	refs  []int32
 }
 
-func (v valueRefs) String() string {
+func (v ValueRefs) String() string {
 	return fmt.Sprintf("%v %v", v.value, v.refs)
 }
 
-type propRefs struct {
-	prop   string
-	values []valueRefs
+type IndexEntry struct {
+	key       string
+	valueType IndexEntryType
+	values    []ValueRefs
 }
 
-type jsonTypeValue struct {
-	_type indexType
-	value interface{}
-}
+type IndexT []IndexEntry
 
-func (p jsonTypeValue) String() string {
-	return fmt.Sprintf("%v{%c}", p.value, p._type)
+/* Types used when aggregating json */
+/* **** */
+type aggregateKeyT struct {
+	key       string
+	valueType IndexEntryType
 }
+type aggregateValueT interface{}
+type aggregateFileRefT []int32
+type aggregateT map[aggregateKeyT]map[aggregateValueT]aggregateFileRefT
+
+type flattenJsonT map[aggregateKeyT]aggregateValueT
+
+/* **** */
 
 func check(err error) {
 	if err != nil {
@@ -91,111 +99,122 @@ func parseJson(bytes []byte) interface{} {
 	return result
 }
 
-func flattenJsonMap(acc map[string]jsonTypeValue, prefix string, jMap map[string]interface{}) {
+func flattenJsonMap(flatten flattenJsonT, prefix string, jMap map[string]interface{}) {
 	for key, jItem := range jMap {
-		flattenWithPrefix(acc, prefix+"/"+key, jItem)
+		flattenWithPrefix(flatten, prefix+"/"+key, jItem)
 	}
 }
 
-func flattenJsonArr(acc map[string]jsonTypeValue, prefix string, jArr []interface{}) {
+func flattenJsonArr(flatten flattenJsonT, prefix string, jArr []interface{}) {
 	for i, jItem := range jArr {
-		flattenWithPrefix(acc, prefix+"/"+strconv.Itoa(i), jItem)
+		flattenWithPrefix(flatten, prefix+"/"+strconv.Itoa(i), jItem)
 	}
 }
 
-func flattenWithPrefix(acc map[string]jsonTypeValue, prefix string, unflatten interface{}) {
+func flattenWithPrefix(flatten flattenJsonT, prefix string, unflatten interface{}) {
 	switch v := unflatten.(type) {
 	case map[string]interface{}:
-		flattenJsonMap(acc, prefix, v)
+		flattenJsonMap(flatten, prefix, v)
 	case []interface{}:
-		flattenJsonArr(acc, prefix, v)
+		flattenJsonArr(flatten, prefix, v)
 	case string:
-		acc[prefix] = jsonTypeValue{strType, v}
+		flatten[aggregateKeyT{prefix, StrType}] = v
 	case float64:
-		acc[prefix] = jsonTypeValue{floatType, v}
+		flatten[aggregateKeyT{prefix, FloatType}] = v
 	default:
-		acc[prefix] = jsonTypeValue{nullType, v}
+		flatten[aggregateKeyT{prefix, NullType}] = v
 	}
 }
 
-func flattenJson(unflatten interface{}) map[string]jsonTypeValue {
-	flatten := make(map[string]jsonTypeValue)
+func flattenJson(unflatten interface{}) flattenJsonT {
+	flatten := make(flattenJsonT)
 	flattenWithPrefix(flatten, "", unflatten)
 	return flatten
 }
 
-func aggregateJson(agg map[string]map[jsonTypeValue][]int, flatten map[string]jsonTypeValue, fileIdx int) {
-	for prop, value := range flatten {
-		propMap, hasPropMap := agg[prop]
-		if !hasPropMap {
-			propMap = make(map[jsonTypeValue][]int)
-			propMap[value] = []int{fileIdx}
-			agg[prop] = propMap
+func aggregateJson(agg aggregateT, flatten flattenJsonT, fileIdx int32) {
+	for aggregateKey, aggregateValue := range flatten {
+		fileRefsMap, hasFileRefsMap := agg[aggregateKey]
+		if !hasFileRefsMap {
+			fileRefsMap = make(map[aggregateValueT]aggregateFileRefT)
+			fileRefsMap[aggregateValue] = []int32{fileIdx}
+			agg[aggregateKey] = fileRefsMap
 		} else {
-			propMap[value] = append(propMap[value], fileIdx)
+			fileRefsMap[aggregateValue] = append(fileRefsMap[aggregateValue], fileIdx)
 		}
 	}
 }
 
-func sortValues(values map[jsonTypeValue][]int) []valueRefs {
-	less := func(a, b jsonTypeValue) int {
+func sortValues(values map[aggregateValueT]aggregateFileRefT, valueType IndexEntryType) []ValueRefs {
+	aggregateValueCmp := func(a, b aggregateValueT) int {
 		/* Should return a negative number when a < b,
 		** a positive number when a > b
 		** and zero when a == b. */
-		typesCmp := cmp.Compare(a._type, b._type)
-		if typesCmp != 0 {
-			return typesCmp
-		}
-
-		switch a._type {
-		case floatType:
-			return cmp.Compare(a.value.(float64), b.value.(float64))
-		case strType:
-			return cmp.Compare(a.value.(string), b.value.(string))
-		case nullType:
+		switch valueType {
+		case FloatType:
+			return cmp.Compare(a.(float64), b.(float64))
+		case StrType:
+			return cmp.Compare(a.(string), b.(string))
+		case NullType:
 			return 0
 		}
-		message := fmt.Sprintf("Unknown type %c", a._type)
+		message := fmt.Sprintf("Unknown type %c\n", valueType)
 		panic(message)
 	}
 
-	keys := make([]jsonTypeValue, 0, len(values))
+	keys := make([]aggregateValueT, 0, len(values))
 	for k := range values {
 		keys = append(keys, k)
 	}
 
-	slices.SortFunc(keys, less)
+	slices.SortFunc(keys, aggregateValueCmp)
 
-	sortedRefs := make([]valueRefs, 0, len(keys))
+	sortedRefs := make([]ValueRefs, 0, len(keys))
 	for _, key := range keys {
-		sortedRefs = append(sortedRefs, valueRefs{key, values[key]})
+		sortedRefs = append(sortedRefs, ValueRefs{key, values[key]})
 	}
 	return sortedRefs
 }
 
-func sortedKeys[K cmp.Ordered, V any](mapToSort map[K]V) []K {
-	keys := make([]K, 0, len(mapToSort))
+// func sortedKeys[K cmp.Ordered, V any](mapToSort map[K]V) []K {
+// 	keys := make([]K, 0, len(mapToSort))
+// 	for p := range mapToSort {
+// 		keys = append(keys, p)
+// 	}
+// 	slices.SortFunc(keys, cmp.Compare)
+// 	return keys
+// }
+
+func sortedAggregateKeys(mapToSort aggregateT) []aggregateKeyT {
+	aggregateKeyCmp := func(x, y aggregateKeyT) int {
+		valueCmp := cmp.Compare(x.key, y.key)
+		if valueCmp != 0 {
+			return valueCmp
+		}
+		return cmp.Compare(x.valueType, y.valueType)
+	}
+	keys := make([]aggregateKeyT, 0, len(mapToSort))
 	for p := range mapToSort {
 		keys = append(keys, p)
 	}
-	slices.SortFunc(keys, cmp.Compare)
+
+	slices.SortFunc(keys, aggregateKeyCmp)
 	return keys
 }
 
-func createIndex(referenceAgg map[string]map[jsonTypeValue][]int) []propRefs {
-	index := make([]propRefs, 0, len(referenceAgg))
-	for _, p := range sortedKeys(referenceAgg) {
-		values := sortValues(referenceAgg[p])
-		index = append(index, propRefs{p, values})
+func createIndex(agg aggregateT) IndexT {
+	index := make(IndexT, 0, len(agg))
+	for _, p := range sortedAggregateKeys(agg) {
+		values := sortValues(agg[p], p.valueType)
+		index = append(index, IndexEntry{p.key, p.valueType, values})
 	}
 	return index
 }
 
-func printIndex(index []propRefs) {
+func printIndex(index IndexT) {
 	// fmt.Println(index)
-
 	for _, ref := range index {
-		fmt.Printf("%v:", ref.prop)
+		fmt.Printf("%v:", ref.key)
 		for _, val := range ref.values {
 			fmt.Print(val, " ")
 		}
@@ -203,18 +222,60 @@ func printIndex(index []propRefs) {
 	fmt.Printf("\n")
 }
 
+// func serializeIndex(index []indexEntry) []byte {
+
+// 	appendFloat := func(buff *bytes.Buffer, f float64) {
+// 		binary.Write(buff, binary.BigEndian, f)
+// 	}
+// 	appendInt := func(buff *bytes.Buffer, i int32) {
+// 		binary.Write(buff, binary.BigEndian, i)
+// 	}
+
+// 	buff := bytes.NewBuffer([]byte{})
+
+// 	stringSep := byte(NUL)
+// 	lineEnd := byte(LF)
+// 	// maybe buff.Grow(n) .. if you hit perf issues?
+// 	for _, prop := range index {
+// 		buff.WriteString(prop.prop) // {key}
+// 		buff.WriteByte(stringSep)   // \x00
+
+// 		for _, propValue := range prop.values {
+// 			switch propValue.value._type {
+// 			case floatType:
+// 				buff.WriteByte(byte(floatType))                    // {type byte = 'f'}
+// 				appendFloat(buff, propValue.value.value.(float64)) // {value}
+// 				appendInt(buff, int32(len(propValue.refs)))        // {n file indexes}
+// 				for _, fileRef := range propValue.refs {           // {file indexes}
+// 					appendInt(buff, int32(fileRef))
+// 				}
+
+// 			case strType:
+// 				fmt.Printf("Appending strings\n")
+// 			case nullType:
+// 				fmt.Printf("Appending nulls\n")
+// 			default:
+// 				message := fmt.Sprintf("Unknown type %c\n", propValue.value._type)
+// 				panic(message)
+// 			}
+// 		}
+// 		buff.WriteByte(lineEnd) // {\n}
+// 	}
+// 	return buff.Bytes()
+// }
+
 func main() {
 	dirPath := "./db"
 
-	agg := make(map[string]map[jsonTypeValue][]int)
+	indexAggregator := make(aggregateT)
 	for fileIdx, fileName := range listDir(dirPath) {
 		fmt.Println("Adding file:", fileName)
 
 		unflatten := parseJson(readFile(dirPath + "/" + strconv.Itoa(fileIdx)))
 		flatten := flattenJson(unflatten)
-		aggregateJson(agg, flatten, fileIdx)
+		aggregateJson(indexAggregator, flatten, int32(fileIdx))
 	}
 
-	index := createIndex(agg)
+	index := createIndex(indexAggregator)
 	printIndex(index)
 }
