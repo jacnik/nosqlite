@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -212,7 +215,6 @@ func createIndex(agg aggregateT) IndexT {
 }
 
 func printIndex(index IndexT) {
-	// fmt.Println(index)
 	for _, ref := range index {
 		fmt.Printf("%v:", ref.key)
 		for _, val := range ref.values {
@@ -222,47 +224,182 @@ func printIndex(index IndexT) {
 	fmt.Printf("\n")
 }
 
-// func serializeIndex(index []indexEntry) []byte {
+func serializeIndex(index IndexT) []byte {
+	stringSep := byte(NUL)
+	lineEnd := byte(LF)
 
-// 	appendFloat := func(buff *bytes.Buffer, f float64) {
-// 		binary.Write(buff, binary.BigEndian, f)
-// 	}
-// 	appendInt := func(buff *bytes.Buffer, i int32) {
-// 		binary.Write(buff, binary.BigEndian, i)
-// 	}
+	appendInt := func(buff *bytes.Buffer, i int32) {
+		binary.Write(buff, binary.BigEndian, i)
+	}
 
-// 	buff := bytes.NewBuffer([]byte{})
+	appendFloat := func(buff *bytes.Buffer, f float64) {
+		binary.Write(buff, binary.BigEndian, f)
+	}
 
-// 	stringSep := byte(NUL)
-// 	lineEnd := byte(LF)
-// 	// maybe buff.Grow(n) .. if you hit perf issues?
-// 	for _, prop := range index {
-// 		buff.WriteString(prop.prop) // {key}
-// 		buff.WriteByte(stringSep)   // \x00
+	appendFileRefs := func(buff *bytes.Buffer, fileRefs []int32) {
+		appendInt(buff, int32(len(fileRefs))) // {n file indexes}
+		for _, fileRef := range fileRefs {    // {file indexes}
+			appendInt(buff, int32(fileRef))
+		}
+	}
+	appendFloatRefs := func(buff *bytes.Buffer, valueRefs []ValueRefs) {
+		for _, valueRef := range valueRefs {
+			appendFloat(buff, valueRef.value.(float64)) // {value}
+			appendFileRefs(buff, valueRef.refs)
+		}
+	}
 
-// 		for _, propValue := range prop.values {
-// 			switch propValue.value._type {
-// 			case floatType:
-// 				buff.WriteByte(byte(floatType))                    // {type byte = 'f'}
-// 				appendFloat(buff, propValue.value.value.(float64)) // {value}
-// 				appendInt(buff, int32(len(propValue.refs)))        // {n file indexes}
-// 				for _, fileRef := range propValue.refs {           // {file indexes}
-// 					appendInt(buff, int32(fileRef))
-// 				}
+	appendStringRefs := func(buff *bytes.Buffer, valueRefs []ValueRefs) {
+		for _, valueRef := range valueRefs {
+			buff.WriteString(valueRef.value.(string)) // {value}
+			buff.WriteByte(stringSep)                 // {string sep}
+			appendFileRefs(buff, valueRef.refs)
+		}
+	}
 
-// 			case strType:
-// 				fmt.Printf("Appending strings\n")
-// 			case nullType:
-// 				fmt.Printf("Appending nulls\n")
-// 			default:
-// 				message := fmt.Sprintf("Unknown type %c\n", propValue.value._type)
-// 				panic(message)
-// 			}
-// 		}
-// 		buff.WriteByte(lineEnd) // {\n}
-// 	}
-// 	return buff.Bytes()
-// }
+	appendNullRefs := func(buff *bytes.Buffer, valueRefs []ValueRefs) {
+		for _, valueRef := range valueRefs {
+			appendFileRefs(buff, valueRef.refs)
+		}
+	}
+
+	buff := bytes.NewBuffer(make([]byte, 0, 512))
+
+	for _, indexEntry := range index {
+		buff.WriteString(indexEntry.key)           // {key}
+		buff.WriteByte(stringSep)                  // {string sep}
+		buff.WriteByte(byte(indexEntry.valueType)) // {type byte = 'f' | 's' | 'n'}
+
+		switch indexEntry.valueType {
+		case FloatType:
+			appendFloatRefs(buff, indexEntry.values)
+		case StrType:
+			appendStringRefs(buff, indexEntry.values)
+		case NullType:
+			appendNullRefs(buff, indexEntry.values)
+		default:
+			message := fmt.Sprintf("Unknown type %c\n", indexEntry.valueType)
+			panic(message)
+		}
+		buff.WriteByte(lineEnd) // {\n}
+	}
+	return buff.Bytes()
+}
+
+func deserializeIndex(bytes []byte) IndexT {
+	lineEnd := byte(LF)
+	stringSep := byte(NUL)
+
+	readStr := func(bytes []byte, pos int) (string, int) {
+		endPos := pos
+		for ; endPos < len(bytes); endPos++ {
+			if bytes[endPos] == stringSep {
+				break
+			}
+		}
+
+		s := string(bytes[pos:endPos])
+		// fmt.Printf("Found string %s on positions %d : %d.\n", s, pos, endPos)
+		return s, endPos + 1
+	}
+
+	readType := func(bytes []byte, pos int) (IndexEntryType, int) {
+		entryType := IndexEntryType(bytes[pos])
+		// fmt.Printf("Found type %c on position %d : %d.\n", entryType, pos, pos+1)
+		return entryType, pos + 1
+	}
+
+	readFloat := func(bytes []byte, pos int) (float64, int) {
+		endPos := pos + 8
+		bits := binary.BigEndian.Uint64(bytes[pos:endPos])
+		float := math.Float64frombits(bits)
+
+		// fmt.Printf("Found float %f on position %d : %d\n", float, pos, endPos)
+		return float, endPos
+	}
+
+	readInt := func(bytes []byte, pos int) (uint32, int) {
+		endPos := pos + 4
+		intVal := binary.BigEndian.Uint32(bytes[pos:endPos])
+
+		// fmt.Printf("Found int %d on position %d : %d\n", intVal, pos, endPos)
+		return intVal, endPos
+	}
+
+	readFileRefs := func(bytes []byte, pos int) ([]int32, int) {
+		nIntRefs, newPos := readInt(bytes, pos)
+		pos = newPos
+		refs := make([]int32, 0, nIntRefs)
+		for i := 0; i < int(nIntRefs); i++ {
+			intRef, newPos := readInt(bytes, pos)
+			pos = newPos
+			refs = append(refs, int32(intRef))
+		}
+
+		return refs, pos
+	}
+
+	readFloatValueRefs := func(bytes []byte, pos int) ([]ValueRefs, int) {
+		values := make([]ValueRefs, 0, 32)
+
+		for bytes[pos] != lineEnd {
+			floatVal, newPos := readFloat(bytes, pos)
+			pos = newPos
+			refs, newPos := readFileRefs(bytes, pos)
+			pos = newPos
+			valueRefs := ValueRefs{floatVal, refs}
+			values = append(values, valueRefs)
+		}
+
+		return values, pos + 1
+	}
+
+	readStrValueRefs := func(bytes []byte, pos int) ([]ValueRefs, int) {
+		values := make([]ValueRefs, 0, 32)
+		for bytes[pos] != lineEnd {
+			str, newPos := readStr(bytes, pos)
+			pos = newPos
+			refs, newPos := readFileRefs(bytes, pos)
+			pos = newPos
+			valueRefs := ValueRefs{str, refs}
+			values = append(values, valueRefs)
+		}
+		return values, pos + 1
+	}
+
+	readNullValueRefs := func(bytes []byte, pos int) ([]ValueRefs, int) {
+		refs, pos := readFileRefs(bytes, pos)
+		return []ValueRefs{{nil, refs}}, pos + 1
+	}
+
+	index := make(IndexT, 0, 32)
+	for initPos := 0; initPos < len(bytes); {
+		key, pos := readStr(bytes, initPos)
+		entryType, pos := readType(bytes, pos)
+
+		switch entryType {
+		case FloatType:
+			values, newPos := readFloatValueRefs(bytes, pos)
+			pos = newPos
+			entry := IndexEntry{key, entryType, values}
+			index = append(index, entry)
+		case StrType:
+			values, newPos := readStrValueRefs(bytes, pos)
+			pos = newPos
+			entry := IndexEntry{key, entryType, values}
+			index = append(index, entry)
+		case NullType:
+			values, newPos := readNullValueRefs(bytes, pos)
+			pos = newPos
+			entry := IndexEntry{key, entryType, values}
+			index = append(index, entry)
+		}
+
+		initPos = pos
+	}
+
+	return index
+}
 
 func main() {
 	dirPath := "./db"
@@ -278,4 +415,13 @@ func main() {
 
 	index := createIndex(indexAggregator)
 	printIndex(index)
+
+	indexBytes := serializeIndex(index)
+	fmt.Println(indexBytes)
+	fmt.Println(len(indexBytes))
+
+	deserializedIndex := deserializeIndex(indexBytes)
+	printIndex(deserializedIndex)
+
+	// fmt.Println("Are indexes equal:", index == deserializedIndex)
 }
