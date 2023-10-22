@@ -24,7 +24,7 @@ func listDir(path string) []string {
 
 	names := make([]string, 0, 16)
 	for _, entry := range files {
-		if !entry.IsDir() {
+		if !entry.IsDir() && entry.Name() != "INDEX" {
 			names = append(names, entry.Name())
 		}
 	}
