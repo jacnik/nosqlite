@@ -69,7 +69,7 @@ func TestSerializeAndDeserializeIndex(t *testing.T) {
 	dirPath := "./db"
 
 	indexAggregator := make(aggregateT)
-	for fileIdx, _ := range listDir(dirPath) {
+	for fileIdx := range listDir(dirPath) {
 
 		unflatten := parseJson(readFile(dirPath + "/" + strconv.Itoa(fileIdx)))
 		flatten := flattenJson(unflatten)
