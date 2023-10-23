@@ -227,7 +227,6 @@ func printIndex(index IndexT) {
 
 func serializeIndex(index IndexT) []byte {
 	stringSep := byte(NUL)
-	lineEnd := byte(LF)
 
 	appendInt := func(buff *bytes.Buffer, i size_t) {
 		binary.Write(buff, binary.BigEndian, i)
@@ -244,6 +243,7 @@ func serializeIndex(index IndexT) []byte {
 		}
 	}
 	appendFloatRefs := func(buff *bytes.Buffer, valueRefs []ValueRefs) {
+		appendInt(buff, size_t(len(valueRefs))) // {n of values}
 		for _, valueRef := range valueRefs {
 			appendFloat(buff, valueRef.value.(float64)) // {value}
 			appendFileRefs(buff, valueRef.refs)
@@ -251,6 +251,7 @@ func serializeIndex(index IndexT) []byte {
 	}
 
 	appendStringRefs := func(buff *bytes.Buffer, valueRefs []ValueRefs) {
+		appendInt(buff, size_t(len(valueRefs))) // {n of values}
 		for _, valueRef := range valueRefs {
 			buff.WriteString(valueRef.value.(string)) // {value}
 			buff.WriteByte(stringSep)                 // {string sep}
@@ -282,13 +283,11 @@ func serializeIndex(index IndexT) []byte {
 			message := fmt.Sprintf("Unknown type %c\n", indexEntry.valueType)
 			panic(message)
 		}
-		buff.WriteByte(lineEnd) // {\n}
 	}
 	return buff.Bytes()
 }
 
 func deserializeIndex(bytes []byte) IndexT {
-	lineEnd := byte(LF)
 	stringSep := byte(NUL)
 
 	readStr := func(bytes []byte, pos int) (string, int) {
@@ -340,10 +339,10 @@ func deserializeIndex(bytes []byte) IndexT {
 		return refs, pos
 	}
 
-	readFloatValueRefs := func(bytes []byte, pos int) ([]ValueRefs, int) {
-		values := make([]ValueRefs, 0, 32)
+	readFloatValueRefs := func(bytes []byte, pos int, nValues size_t) ([]ValueRefs, int) {
+		values := make([]ValueRefs, 0, nValues)
 
-		for bytes[pos] != lineEnd {
+		for i := size_t(0); i < nValues; i++ {
 			floatVal, newPos := readFloat(bytes, pos)
 			pos = newPos
 			refs, newPos := readFileRefs(bytes, pos)
@@ -352,12 +351,13 @@ func deserializeIndex(bytes []byte) IndexT {
 			values = append(values, valueRefs)
 		}
 
-		return values, pos + 1
+		return values, pos
 	}
 
-	readStrValueRefs := func(bytes []byte, pos int) ([]ValueRefs, int) {
-		values := make([]ValueRefs, 0, 32)
-		for bytes[pos] != lineEnd {
+	readStrValueRefs := func(bytes []byte, pos int, nValues size_t) ([]ValueRefs, int) {
+		values := make([]ValueRefs, 0, nValues)
+
+		for i := size_t(0); i < nValues; i++ {
 			str, newPos := readStr(bytes, pos)
 			pos = newPos
 			refs, newPos := readFileRefs(bytes, pos)
@@ -365,12 +365,13 @@ func deserializeIndex(bytes []byte) IndexT {
 			valueRefs := ValueRefs{str, refs}
 			values = append(values, valueRefs)
 		}
-		return values, pos + 1
+
+		return values, pos
 	}
 
 	readNullValueRefs := func(bytes []byte, pos int) ([]ValueRefs, int) {
 		refs, pos := readFileRefs(bytes, pos)
-		return []ValueRefs{{nil, refs}}, pos + 1
+		return []ValueRefs{{nil, refs}}, pos
 	}
 
 	index := make(IndexT, 0, 32)
@@ -380,12 +381,16 @@ func deserializeIndex(bytes []byte) IndexT {
 
 		switch entryType {
 		case FloatType:
-			values, newPos := readFloatValueRefs(bytes, pos)
+			nValues, newPos := readInt(bytes, pos)
+			pos = newPos
+			values, newPos := readFloatValueRefs(bytes, pos, nValues)
 			pos = newPos
 			entry := IndexEntry{key, entryType, values}
 			index = append(index, entry)
 		case StrType:
-			values, newPos := readStrValueRefs(bytes, pos)
+			nValues, newPos := readInt(bytes, pos)
+			pos = newPos
+			values, newPos := readStrValueRefs(bytes, pos, nValues)
 			pos = newPos
 			entry := IndexEntry{key, entryType, values}
 			index = append(index, entry)
@@ -418,8 +423,8 @@ func main() {
 	printIndex(index)
 
 	indexBytes := serializeIndex(index)
-	fmt.Println(indexBytes)
-	fmt.Println(len(indexBytes))
+	// fmt.Println(indexBytes)
+	// fmt.Println(len(indexBytes))
 
 	deserializedIndex := deserializeIndex(indexBytes)
 	printIndex(deserializedIndex)
