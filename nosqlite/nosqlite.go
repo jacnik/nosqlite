@@ -197,7 +197,7 @@ func sortedAggregateKeys(mapToSort aggregateT) []aggregateKeyT {
 	return keys
 }
 
-func createIndex(agg aggregateT) IndexT {
+func indexAgregate(agg aggregateT) IndexT {
 	index := make(IndexT, 0, len(agg))
 	for _, p := range sortedAggregateKeys(agg) {
 		values := sortValues(agg[p], p.valueType)
@@ -396,20 +396,21 @@ func deserializeIndex(bytes []byte) IndexT {
 	return index
 }
 
-func main() {
-	dirPath := "./db"
-
+func IndexFiles(filePaths []string) IndexT { // todo err
 	indexAggregator := make(aggregateT)
-	for fileIdx, fileName := range listDir(dirPath) {
-		fmt.Println("Adding file:", fileName)
-
-		unflatten := parseJson(readFile(dirPath + "/" + strconv.Itoa(fileIdx)))
+	for fileIdx, path := range filePaths {
+		unflatten := parseJson(readFile(path))
 		flatten := flattenJson(unflatten)
 		aggregateJson(indexAggregator, flatten, size_t(fileIdx))
 	}
 
-	index := createIndex(indexAggregator)
-	printIndex(index)
+	index := indexAgregate(indexAggregator)
+	return index
+}
+
+func main() {
+	paths := []string{"./db/0", "./db/1"} // todo use listDir(dirPath)
+	index := IndexFiles(paths)
 
 	indexBytes := serializeIndex(index)
 	// fmt.Println(indexBytes)

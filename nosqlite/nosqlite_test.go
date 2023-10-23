@@ -1,32 +1,31 @@
 package main
 
 import (
-	"strconv"
 	"testing"
 )
 
-func compareValueRefs(v1, v2 ValueRefs, valueType IndexEntryType) bool {
+func compareValueRefs(expected, actual ValueRefs, valueType IndexEntryType) bool {
 	switch valueType {
 	case FloatType:
-		if v1.value.(float64) != v2.value.(float64) {
+		if expected.value.(float64) != actual.value.(float64) {
 			return false
 		}
 	case StrType:
-		if v1.value.(string) != v2.value.(string) {
+		if expected.value.(string) != actual.value.(string) {
 			return false
 		}
 	case NullType:
-		if v1.value != nil || v2.value != nil {
+		if expected.value != nil || actual.value != nil {
 			return false
 		}
 	default:
 		return false
 	}
-	if len(v1.refs) != len(v2.refs) {
+	if len(expected.refs) != len(actual.refs) {
 		return false
 	}
-	for i, v := range v1.refs {
-		if v != v2.refs[i] {
+	for i, v := range expected.refs {
+		if v != actual.refs[i] {
 			return false
 		}
 	}
@@ -34,30 +33,30 @@ func compareValueRefs(v1, v2 ValueRefs, valueType IndexEntryType) bool {
 	return true
 }
 
-func compareIndexEntries(e1, e2 IndexEntry) bool {
-	if e1.valueType != e2.valueType {
+func compareIndexEntries(expected, actual IndexEntry) bool {
+	if expected.valueType != actual.valueType {
 		return false
 	}
-	if e1.key != e2.key {
+	if expected.key != actual.key {
 		return false
 	}
-	if len(e1.values) != len(e2.values) {
+	if len(expected.values) != len(actual.values) {
 		return false
 	}
-	for i, v := range e1.values {
-		if !compareValueRefs(v, e2.values[i], e2.valueType) {
+	for i, v := range expected.values {
+		if !compareValueRefs(v, actual.values[i], actual.valueType) {
 			return false
 		}
 	}
 	return true
 }
 
-func compareIndexes(i1, i2 IndexT) bool {
-	if len(i1) != len(i2) {
+func compareIndexes(expected, actual IndexT) bool {
+	if len(expected) != len(actual) {
 		return false
 	}
-	for i, v := range i1 {
-		if !compareIndexEntries(v, i2[i]) {
+	for i, v := range expected {
+		if !compareIndexEntries(v, actual[i]) {
 			return false
 		}
 	}
@@ -66,17 +65,8 @@ func compareIndexes(i1, i2 IndexT) bool {
 
 // Check if index can be serialized and deseralized back.
 func TestSerializeAndDeserializeIndex(t *testing.T) {
-	dirPath := "./db"
-
-	indexAggregator := make(aggregateT)
-	for fileIdx := range listDir(dirPath) {
-
-		unflatten := parseJson(readFile(dirPath + "/" + strconv.Itoa(fileIdx)))
-		flatten := flattenJson(unflatten)
-		aggregateJson(indexAggregator, flatten, size_t(fileIdx))
-	}
-
-	index := createIndex(indexAggregator)
+	paths := []string{"./db/0", "./db/1"}
+	index := IndexFiles(paths)
 
 	indexBytes := serializeIndex(index)
 
@@ -84,5 +74,25 @@ func TestSerializeAndDeserializeIndex(t *testing.T) {
 
 	if !compareIndexes(index, deserializedIndex) {
 		t.Fatalf("Deserialized index different than original:\n%v\n%v", index, deserializedIndex)
+	}
+}
+
+// Check if it can create correct index from files.
+func TestIndexFiles(t *testing.T) {
+	paths := []string{"./db/0", "./db/1"}
+	index := IndexFiles(paths)
+
+	expected := IndexT{
+		IndexEntry{"/age", FloatType, []ValueRefs{{value: 17.0, refs: []size_t{1}}, {value: 23.0, refs: []size_t{0}}}},
+		IndexEntry{"/arr/0", FloatType, []ValueRefs{{value: 2.0, refs: []size_t{0}}}},
+		IndexEntry{"/arr/1", FloatType, []ValueRefs{{value: 3.0, refs: []size_t{0}}}},
+		IndexEntry{"/name", StrType, []ValueRefs{{value: "Elliot", refs: []size_t{0}}, {value: "Fraser", refs: []size_t{1}}}},
+		IndexEntry{"/now null behaves", NullType, []ValueRefs{{value: nil, refs: []size_t{0}}}},
+		IndexEntry{"/social/facebook", StrType, []ValueRefs{{value: "https://facebook.com", refs: []size_t{0, 1}}}},
+		IndexEntry{"/social/twitter", StrType, []ValueRefs{{value: "https://twitter.com", refs: []size_t{0, 1}}}},
+		IndexEntry{"/type", StrType, []ValueRefs{{value: "Author", refs: []size_t{1}}, {value: "Reader", refs: []size_t{0}}}}}
+
+	if !compareIndexes(index, expected) {
+		t.Fatalf("Expected index different than actual:\n%v\n%v", index, expected)
 	}
 }
