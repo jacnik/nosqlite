@@ -14,6 +14,7 @@ import (
 	"strconv"
 )
 
+type size_t uint32
 type separator byte
 
 const (
@@ -36,7 +37,7 @@ const (
 
 type ValueRefs struct {
 	value interface{}
-	refs  []int32
+	refs  []size_t
 }
 
 func (v ValueRefs) String() string {
@@ -58,7 +59,7 @@ type aggregateKeyT struct {
 	valueType IndexEntryType
 }
 type aggregateValueT interface{}
-type aggregateFileRefT []int32
+type aggregateFileRefT []size_t
 type aggregateT map[aggregateKeyT]map[aggregateValueT]aggregateFileRefT
 
 type flattenJsonT map[aggregateKeyT]aggregateValueT
@@ -135,12 +136,12 @@ func flattenJson(unflatten interface{}) flattenJsonT {
 	return flatten
 }
 
-func aggregateJson(agg aggregateT, flatten flattenJsonT, fileIdx int32) {
+func aggregateJson(agg aggregateT, flatten flattenJsonT, fileIdx size_t) {
 	for aggregateKey, aggregateValue := range flatten {
 		fileRefsMap, hasFileRefsMap := agg[aggregateKey]
 		if !hasFileRefsMap {
 			fileRefsMap = make(map[aggregateValueT]aggregateFileRefT)
-			fileRefsMap[aggregateValue] = []int32{fileIdx}
+			fileRefsMap[aggregateValue] = []size_t{fileIdx}
 			agg[aggregateKey] = fileRefsMap
 		} else {
 			fileRefsMap[aggregateValue] = append(fileRefsMap[aggregateValue], fileIdx)
@@ -228,7 +229,7 @@ func serializeIndex(index IndexT) []byte {
 	stringSep := byte(NUL)
 	lineEnd := byte(LF)
 
-	appendInt := func(buff *bytes.Buffer, i int32) {
+	appendInt := func(buff *bytes.Buffer, i size_t) {
 		binary.Write(buff, binary.BigEndian, i)
 	}
 
@@ -236,10 +237,10 @@ func serializeIndex(index IndexT) []byte {
 		binary.Write(buff, binary.BigEndian, f)
 	}
 
-	appendFileRefs := func(buff *bytes.Buffer, fileRefs []int32) {
-		appendInt(buff, int32(len(fileRefs))) // {n file indexes}
-		for _, fileRef := range fileRefs {    // {file indexes}
-			appendInt(buff, int32(fileRef))
+	appendFileRefs := func(buff *bytes.Buffer, fileRefs []size_t) {
+		appendInt(buff, size_t(len(fileRefs))) // {n file indexes}
+		for _, fileRef := range fileRefs {     // {file indexes}
+			appendInt(buff, fileRef)
 		}
 	}
 	appendFloatRefs := func(buff *bytes.Buffer, valueRefs []ValueRefs) {
@@ -318,22 +319,22 @@ func deserializeIndex(bytes []byte) IndexT {
 		return float, endPos
 	}
 
-	readInt := func(bytes []byte, pos int) (uint32, int) {
+	readInt := func(bytes []byte, pos int) (size_t, int) {
 		endPos := pos + 4
 		intVal := binary.BigEndian.Uint32(bytes[pos:endPos])
 
 		// fmt.Printf("Found int %d on position %d : %d\n", intVal, pos, endPos)
-		return intVal, endPos
+		return size_t(intVal), endPos
 	}
 
-	readFileRefs := func(bytes []byte, pos int) ([]int32, int) {
+	readFileRefs := func(bytes []byte, pos int) ([]size_t, int) {
 		nIntRefs, newPos := readInt(bytes, pos)
 		pos = newPos
-		refs := make([]int32, 0, nIntRefs)
+		refs := make([]size_t, 0, nIntRefs)
 		for i := 0; i < int(nIntRefs); i++ {
 			intRef, newPos := readInt(bytes, pos)
 			pos = newPos
-			refs = append(refs, int32(intRef))
+			refs = append(refs, intRef)
 		}
 
 		return refs, pos
@@ -410,7 +411,7 @@ func main() {
 
 		unflatten := parseJson(readFile(dirPath + "/" + strconv.Itoa(fileIdx)))
 		flatten := flattenJson(unflatten)
-		aggregateJson(indexAggregator, flatten, int32(fileIdx))
+		aggregateJson(indexAggregator, flatten, size_t(fileIdx))
 	}
 
 	index := createIndex(indexAggregator)
