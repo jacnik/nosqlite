@@ -180,15 +180,6 @@ func sortValues(values map[aggregateValueT]aggregateFileRefT, valueType IndexEnt
 	return sortedRefs
 }
 
-// func sortedKeys[K cmp.Ordered, V any](mapToSort map[K]V) []K {
-// 	keys := make([]K, 0, len(mapToSort))
-// 	for p := range mapToSort {
-// 		keys = append(keys, p)
-// 	}
-// 	slices.SortFunc(keys, cmp.Compare)
-// 	return keys
-// }
-
 func sortedAggregateKeys(mapToSort aggregateT) []aggregateKeyT {
 	aggregateKeyCmp := func(x, y aggregateKeyT) int {
 		valueCmp := cmp.Compare(x.key, y.key)
