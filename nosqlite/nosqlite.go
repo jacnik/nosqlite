@@ -382,15 +382,13 @@ func deserializeIndex(bytes []byte) IndexT {
 		switch entryType {
 		case FloatType:
 			nValues, newPos := readInt(bytes, pos)
-			pos = newPos
-			values, newPos := readFloatValueRefs(bytes, pos, nValues)
+			values, newPos := readFloatValueRefs(bytes, newPos, nValues)
 			pos = newPos
 			entry := IndexEntry{key, entryType, values}
 			index = append(index, entry)
 		case StrType:
 			nValues, newPos := readInt(bytes, pos)
-			pos = newPos
-			values, newPos := readStrValueRefs(bytes, pos, nValues)
+			values, newPos := readStrValueRefs(bytes, newPos, nValues)
 			pos = newPos
 			entry := IndexEntry{key, entryType, values}
 			index = append(index, entry)
