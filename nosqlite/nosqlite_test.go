@@ -96,3 +96,63 @@ func TestIndexFiles(t *testing.T) {
 		t.Fatalf("Expected index different than actual:\n%v\n%v", index, expected)
 	}
 }
+
+func compareSlices[T comparable](a, b []T) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if b[i] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// Check if it can return file idx list for simple string query.
+func TestQueryIndexForString(t *testing.T) {
+	index := ReadIndex("./db")
+	refs := queryForRefs(&index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"})
+
+	expected := []size_t{0, 1}
+
+	if !compareSlices(refs, expected) {
+		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
+	}
+}
+
+// Check if it can return file idx list for simple float query.
+func TestQueryIndexForFloat(t *testing.T) {
+	index := ReadIndex("./db")
+	refs := queryForRefs(&index, &valueQuery[float64]{"/age", FloatType, 23})
+
+	expected := []size_t{0}
+
+	if !compareSlices(refs, expected) {
+		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
+	}
+}
+
+// Check if it can return file idx list for simple null query.
+func TestQueryIndexForNull(t *testing.T) {
+	index := ReadIndex("./db")
+	refs := queryForNullRefs(&index, &nullQuery{"/now null behaves"})
+
+	expected := []size_t{0}
+
+	if !compareSlices(refs, expected) {
+		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
+	}
+}
+
+// Check if it can return empty list when querying for non existing element.
+func TestQueryIndexForNonExisting(t *testing.T) {
+	index := ReadIndex("./db")
+	refs := queryForNullRefs(&index, &nullQuery{"/not found"})
+
+	expected := []size_t{}
+
+	if !compareSlices(refs, expected) {
+		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
+	}
+}

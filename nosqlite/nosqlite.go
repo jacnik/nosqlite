@@ -180,13 +180,18 @@ func sortValues(values map[aggregateValueT]aggregateFileRefT, valueType IndexEnt
 	return sortedRefs
 }
 
+func valueWithTypeCmp[T cmp.Ordered](valueA, valueB T, typeA, typeB IndexEntryType) int {
+	valueCmp := cmp.Compare(valueA, valueB)
+	if valueCmp != 0 {
+		return valueCmp
+	}
+
+	return cmp.Compare(typeA, typeB)
+}
+
 func sortedAggregateKeys(mapToSort aggregateT) []aggregateKeyT {
 	aggregateKeyCmp := func(x, y aggregateKeyT) int {
-		valueCmp := cmp.Compare(x.key, y.key)
-		if valueCmp != 0 {
-			return valueCmp
-		}
-		return cmp.Compare(x.valueType, y.valueType)
+		return valueWithTypeCmp(x.key, y.key, x.valueType, y.valueType)
 	}
 	keys := make([]aggregateKeyT, 0, len(mapToSort))
 	for p := range mapToSort {
@@ -290,13 +295,11 @@ func deserializeIndex(bytes []byte) IndexT {
 		}
 
 		s := string(bytes[pos:endPos])
-		// fmt.Printf("Found string %s on positions %d : %d.\n", s, pos, endPos)
 		return s, endPos + 1
 	}
 
 	readType := func(bytes []byte, pos int) (IndexEntryType, int) {
 		entryType := IndexEntryType(bytes[pos])
-		// fmt.Printf("Found type %c on position %d : %d.\n", entryType, pos, pos+1)
 		return entryType, pos + 1
 	}
 
@@ -304,16 +307,12 @@ func deserializeIndex(bytes []byte) IndexT {
 		endPos := pos + 8
 		bits := binary.BigEndian.Uint64(bytes[pos:endPos])
 		float := math.Float64frombits(bits)
-
-		// fmt.Printf("Found float %f on position %d : %d\n", float, pos, endPos)
 		return float, endPos
 	}
 
 	readInt := func(bytes []byte, pos int) (size_t, int) {
 		endPos := pos + 4
 		intVal := binary.BigEndian.Uint32(bytes[pos:endPos])
-
-		// fmt.Printf("Found int %d on position %d : %d\n", intVal, pos, endPos)
 		return size_t(intVal), endPos
 	}
 
@@ -408,16 +407,84 @@ func IndexFiles(filePaths []string) IndexT { // todo err
 	return index
 }
 
-func main() {
-	paths := []string{"./db/0", "./db/1"} // todo use listDir(dirPath)
-	index := IndexFiles(paths)
-
+func SaveIndex(index IndexT, dirPath string) error {
 	indexBytes := serializeIndex(index)
-	// fmt.Println(indexBytes)
-	// fmt.Println(len(indexBytes))
+	err := os.WriteFile(dirPath+"/INDEX", indexBytes, 0644)
+	return err
+}
 
-	deserializedIndex := deserializeIndex(indexBytes)
-	printIndex(deserializedIndex)
+func ReadIndex(dirPath string) IndexT { // TODO err
+	indexBytes := readFile(dirPath + "/INDEX")
+	index := deserializeIndex(indexBytes)
+	return index
+}
+
+type valueTypes interface{ float64 | string }
+
+type valueQuery[T valueTypes] struct {
+	Key   string
+	Type  IndexEntryType
+	Value T
+}
+
+type nullQuery struct {
+	Key string
+}
+
+func queryForNullRefs(index *IndexT, query *nullQuery) []size_t {
+	indexEntryCmp := func(entry IndexEntry, key string) int {
+		return valueWithTypeCmp(entry.key, key, entry.valueType, NullType)
+	}
+
+	if entryIdx, found := slices.BinarySearchFunc(*index, query.Key, indexEntryCmp); found {
+		entry := (*index)[entryIdx]
+		return entry.values[0].refs
+	}
+	return nil
+}
+
+func queryForRefs[T valueTypes](index *IndexT, query *valueQuery[T]) []size_t {
+	indexEntryCmp := func(entry IndexEntry, key string) int {
+		return valueWithTypeCmp(entry.key, key, entry.valueType, query.Type)
+	}
+
+	valueRefCmp := func(valueRef ValueRefs, key T) int {
+		return cmp.Compare(valueRef.value.(T), key)
+	}
+
+	if entryIdx, found := slices.BinarySearchFunc(*index, query.Key, indexEntryCmp); found {
+		entry := (*index)[entryIdx]
+		if refIdx, found := slices.BinarySearchFunc(entry.values, query.Value, valueRefCmp); found {
+			return entry.values[refIdx].refs
+		}
+	}
+	return nil
+}
+
+func QueryIndex(index *IndexT, query string) {
+	fmt.Println(queryForRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
+	fmt.Println(queryForRefs(index, &valueQuery[float64]{"/age", FloatType, 23}))
+
+	fmt.Println(queryForNullRefs(index, &nullQuery{"/now null behaves"}))
+
+	for i, k := range queryForNullRefs(index, &nullQuery{"/not found"}) {
+		fmt.Println(i, k)
+		fmt.Println(queryForNullRefs(index, &nullQuery{"/not found"}))
+	}
+}
+
+func main() {
+	// paths := []string{"./db/0", "./db/1"} // todo use listDir(dirPath)
+	// index := IndexFiles(paths)
+
+	// err := SaveIndex(index, "./db")
+	// check(err)
+
+	index := ReadIndex("./db")
+	QueryIndex(&index, "")
+	// indexBytes := serializeIndex(index)
+	// fmt.Println(index)
+	// fmt.Println(len(indexBytes))
 
 	// fmt.Println("Are indexes equal:", index == deserializedIndex)
 }

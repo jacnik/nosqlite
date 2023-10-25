@@ -24,3 +24,7 @@ go.work
 .devcontainer/
 .vscode/
 
+# Index files
+INDEX
+# Except INDEX files used for tests
+!/nosqlite/db/INDEX
