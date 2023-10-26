@@ -156,3 +156,25 @@ func TestQueryIndexForNonExisting(t *testing.T) {
 		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
 	}
 }
+
+// Check if refsUnion returns union of many ref arrays.
+func TestRefUnionForMany(t *testing.T) {
+	union := refsUnion([]size_t{0, 5, 6}, []size_t{0, 1, 4, 6}, []size_t{1, 2, 3, 4, 5, 6})
+
+	expected := []size_t{0, 1, 2, 3, 4, 5, 6}
+
+	if !compareSlices(union, expected) {
+		t.Fatalf("Expected refs union different than actual:\n%v\n%v", expected, union)
+	}
+}
+
+// Check if refsUnion returns intersection of many ref arrays.
+func TestRefIntersectionForMany(t *testing.T) {
+	intersection := refsIntersection([]size_t{0, 5, 6}, []size_t{0, 1, 4, 6}, []size_t{0, 2, 3, 4, 5, 6})
+
+	expected := []size_t{0, 6}
+
+	if !compareSlices(intersection, expected) {
+		t.Fatalf("Expected refs intersection different than actual:\n%v\n%v", expected, intersection)
+	}
+}

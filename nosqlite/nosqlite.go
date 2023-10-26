@@ -461,6 +461,54 @@ func queryForRefs[T valueTypes](index *IndexT, query *valueQuery[T]) []size_t {
 	return nil
 }
 
+func divmod(numerator, denominator int64) (quotient, remainder int64) {
+	quotient = numerator / denominator
+	remainder = numerator % denominator
+	return
+}
+
+const MASK_SIZE = 64
+
+func refsUnion(refs ...[]size_t) []size_t {
+	/* Result of AND operations on refs */
+	refsMask := uint64(0)
+	for _, refsArr := range refs {
+		for _, ref := range refsArr {
+			refsMask = refsMask | uint64(1)<<ref
+		}
+	}
+
+	res := make([]size_t, 0, MASK_SIZE)
+
+	for i := 0; i < MASK_SIZE; i++ {
+		if refsMask&(uint64(1)<<i) != 0 {
+			res = append(res, size_t(i))
+		}
+	}
+	return res
+}
+
+func refsIntersection(refs ...[]size_t) []size_t {
+	/* Result of OR operations on refs */
+	refsMask := uint64(0xFFFF_FFFF_FFFF_FFFF)
+	for _, refsArr := range refs {
+		unionOfArrayRefs := uint64(0)
+		for _, ref := range refsArr {
+			unionOfArrayRefs = unionOfArrayRefs | uint64(1)<<ref
+		}
+		refsMask = refsMask & unionOfArrayRefs
+	}
+	// fmt.Printf("%b\n", refsMask)
+	res := make([]size_t, 0, MASK_SIZE)
+
+	for i := 0; i < MASK_SIZE; i++ {
+		if refsMask&(uint64(1)<<i) != 0 {
+			res = append(res, size_t(i))
+		}
+	}
+	return res
+}
+
 func QueryIndex(index *IndexT, query string) {
 	fmt.Println(queryForRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
 	fmt.Println(queryForRefs(index, &valueQuery[float64]{"/age", FloatType, 23}))
@@ -482,6 +530,10 @@ func main() {
 
 	index := ReadIndex("./db")
 	QueryIndex(&index, "")
+
+	expected := []size_t{0, 1, 2, 3, 4, 5}
+	fmt.Println(expected[len(expected)-1])
+
 	// indexBytes := serializeIndex(index)
 	// fmt.Println(index)
 	// fmt.Println(len(indexBytes))
