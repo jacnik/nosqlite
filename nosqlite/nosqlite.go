@@ -463,27 +463,19 @@ func queryForRefs[T valueTypes](index *IndexT, query *valueQuery[T]) []size_t {
 	return nil
 }
 
-func divmod(numerator, denominator int64) (quotient, remainder int64) {
-	quotient = numerator / denominator
-	remainder = numerator % denominator
-	return
-}
-
-const MASK_SIZE = 64
-
 func refsUnion(refs ...[]size_t) []size_t {
 	/* Result of AND operations on refs */
-	refsMask := bitflags.BitsBlock_EMPTY
+	refsMask := bitflags.BitsBlockEmpty
 	for _, refsArr := range refs {
 		for _, ref := range refsArr {
-			refsMask = refsMask.Union(bitflags.BitsBlock_EMPTY.Set(int(ref)))
+			refsMask = refsMask.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
 		}
 	}
 
-	res := make([]size_t, 0, MASK_SIZE)
+	res := make([]size_t, 0, bitflags.BitsBlockSize)
 
-	for i := 0; i < MASK_SIZE; i++ {
-		if refsMask.Has(i) {
+	for i := 0; i < bitflags.BitsBlockSize; i++ {
+		if refsMask.Has(uint(i)) {
 			res = append(res, size_t(i))
 		}
 	}
@@ -492,22 +484,23 @@ func refsUnion(refs ...[]size_t) []size_t {
 
 func refsIntersection(refs ...[]size_t) []size_t {
 	/* Result of OR operations on refs */
-	refsMask := bitflags.BitsBlock_FULL
+	refsMask := bitflags.BitsBlockFull
 	for _, refsArr := range refs {
-		union := bitflags.BitsBlock_EMPTY
+		union := bitflags.BitsBlockEmpty
 		for _, ref := range refsArr {
-			union = union.Union(bitflags.BitsBlock_EMPTY.Set(int(ref)))
+			union = union.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
 		}
 		refsMask = refsMask & union
 	}
 	// fmt.Printf("%b\n", refsMask)
-	res := make([]size_t, 0, MASK_SIZE)
+	res := make([]size_t, 0, bitflags.BitsBlockSize)
 
-	for i := 0; i < MASK_SIZE; i++ {
-		if refsMask.Has(i) {
+	for i := 0; i < bitflags.BitsBlockSize; i++ {
+		if refsMask.Has(uint(i)) {
 			res = append(res, size_t(i))
 		}
 	}
+
 	return res
 }
 

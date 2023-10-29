@@ -6,7 +6,7 @@ import (
 
 // Check if bits are Set correctly.
 func TestCorrectlySetsBit(t *testing.T) {
-	b := BitsBlock_EMPTY
+	b := BitsBlockEmpty
 
 	b = b.Set(2)
 	if b != 0b100 {
@@ -20,7 +20,7 @@ func TestCorrectlySetsBit(t *testing.T) {
 	if b != 0b1101 {
 		t.Fatalf("Expected bit 4 to be set, instead got %04b.\n", b)
 	}
-	b = b.Set(BitsBlock_SIZE)
+	b = b.Set(BitsBlockSize)
 	if b != 0b1101 {
 		t.Fatalf("Expected bits beyond bitfield size nevet to be set.\n")
 	}
@@ -96,7 +96,7 @@ func TestCorrectlyChecksBit(t *testing.T) {
 	if !b.Has(3) {
 		t.Fatalf("Expected check bit 3 to be true.\n")
 	}
-	if b.Has(BitsBlock_SIZE) {
+	if b.Has(BitsBlockSize) {
 		t.Fatalf("Expected check bit beyond bitfield size to be false.\n")
 	}
 }
