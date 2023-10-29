@@ -12,6 +12,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	// "../bitflags"
 )
 
 type size_t uint32
@@ -472,6 +473,7 @@ const MASK_SIZE = 64
 func refsUnion(refs ...[]size_t) []size_t {
 	/* Result of AND operations on refs */
 	refsMask := uint64(0)
+	// refsMask := BITFIELD_EMPTY
 	for _, refsArr := range refs {
 		for _, ref := range refsArr {
 			refsMask = refsMask | uint64(1)<<ref

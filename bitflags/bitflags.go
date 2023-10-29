@@ -35,3 +35,6 @@ func (b BitFlags) Intersect(o BitFlags) BitFlags { return b & o }
 // 	Toggle(pos int) BitField
 // 	Has(pos int) bool
 // }
+
+// https://itecnote.com/tecnote/go-how-would-you-set-and-clear-a-single-bit-in-go/
+// http://graphics.stanford.edu/~seander/bithacks.html
