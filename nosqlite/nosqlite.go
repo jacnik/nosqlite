@@ -12,7 +12,8 @@ import (
 	"os"
 	"slices"
 	"strconv"
-	// "../bitflags"
+
+	"github.com/jacnik/bitflags"
 )
 
 type size_t uint32
@@ -472,18 +473,17 @@ const MASK_SIZE = 64
 
 func refsUnion(refs ...[]size_t) []size_t {
 	/* Result of AND operations on refs */
-	refsMask := uint64(0)
-	// refsMask := BITFIELD_EMPTY
+	refsMask := bitflags.BitsBlock_EMPTY
 	for _, refsArr := range refs {
 		for _, ref := range refsArr {
-			refsMask = refsMask | uint64(1)<<ref
+			refsMask = refsMask.Union(bitflags.BitsBlock_EMPTY.Set(int(ref)))
 		}
 	}
 
 	res := make([]size_t, 0, MASK_SIZE)
 
 	for i := 0; i < MASK_SIZE; i++ {
-		if refsMask&(uint64(1)<<i) != 0 {
+		if refsMask.Has(i) {
 			res = append(res, size_t(i))
 		}
 	}
@@ -492,19 +492,19 @@ func refsUnion(refs ...[]size_t) []size_t {
 
 func refsIntersection(refs ...[]size_t) []size_t {
 	/* Result of OR operations on refs */
-	refsMask := uint64(0xFFFF_FFFF_FFFF_FFFF)
+	refsMask := bitflags.BitsBlock_FULL
 	for _, refsArr := range refs {
-		unionOfArrayRefs := uint64(0)
+		union := bitflags.BitsBlock_EMPTY
 		for _, ref := range refsArr {
-			unionOfArrayRefs = unionOfArrayRefs | uint64(1)<<ref
+			union = union.Union(bitflags.BitsBlock_EMPTY.Set(int(ref)))
 		}
-		refsMask = refsMask & unionOfArrayRefs
+		refsMask = refsMask & union
 	}
 	// fmt.Printf("%b\n", refsMask)
 	res := make([]size_t, 0, MASK_SIZE)
 
 	for i := 0; i < MASK_SIZE; i++ {
-		if refsMask&(uint64(1)<<i) != 0 {
+		if refsMask.Has(i) {
 			res = append(res, size_t(i))
 		}
 	}

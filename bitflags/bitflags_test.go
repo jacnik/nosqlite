@@ -6,7 +6,7 @@ import (
 
 // Check if bits are Set correctly.
 func TestCorrectlySetsBit(t *testing.T) {
-	b := BITFIELD_EMPTY
+	b := BitsBlock_EMPTY
 
 	b = b.Set(2)
 	if b != 0b100 {
@@ -20,7 +20,7 @@ func TestCorrectlySetsBit(t *testing.T) {
 	if b != 0b1101 {
 		t.Fatalf("Expected bit 4 to be set, instead got %04b.\n", b)
 	}
-	b = b.Set(BITFIELD_SIZE)
+	b = b.Set(BitsBlock_SIZE)
 	if b != 0b1101 {
 		t.Fatalf("Expected bits beyond bitfield size nevet to be set.\n")
 	}
@@ -28,7 +28,7 @@ func TestCorrectlySetsBit(t *testing.T) {
 
 // Check if bits are Cleared correctly.
 func TestCorrectlyClearsBit(t *testing.T) {
-	b := BitFlags(0b1101)
+	b := BitsBlock(0b1101)
 
 	b = b.Clear(2)
 	if b != 0b1001 {
@@ -50,7 +50,7 @@ func TestCorrectlyClearsBit(t *testing.T) {
 
 // Check if bits are Toggled correctly.
 func TestCorrectlyToggledBit(t *testing.T) {
-	b := BitFlags(0b1101)
+	b := BitsBlock(0b1101)
 
 	b = b.Toggle(2)
 	if b != 0b1001 {
@@ -82,7 +82,7 @@ func TestCorrectlyToggledBit(t *testing.T) {
 
 // Check if bits are checked correctly.
 func TestCorrectlyChecksBit(t *testing.T) {
-	b := BitFlags(0b1101)
+	b := BitsBlock(0b1101)
 
 	if !b.Has(0) {
 		t.Fatalf("Expected check bit 0 to be true.\n")
@@ -96,14 +96,14 @@ func TestCorrectlyChecksBit(t *testing.T) {
 	if !b.Has(3) {
 		t.Fatalf("Expected check bit 3 to be true.\n")
 	}
-	if b.Has(BITFIELD_SIZE) {
+	if b.Has(BitsBlock_SIZE) {
 		t.Fatalf("Expected check bit beyond bitfield size to be false.\n")
 	}
 }
 
 // Check if bit flags are unioned correctly.
 func TestCorrectlyUnionBitFlags(t *testing.T) {
-	b := BitFlags(0b1101)
+	b := BitsBlock(0b1101)
 
 	u := b.Union(0b0110)
 	if u != 0b1111 {
@@ -113,7 +113,7 @@ func TestCorrectlyUnionBitFlags(t *testing.T) {
 
 // Check if bit flags are intersected correctly.
 func TestCorrectlyIntersectBitFlags(t *testing.T) {
-	b := BitFlags(0b1101)
+	b := BitsBlock(0b1101)
 
 	u := b.Intersect(0b0110)
 	if u != 0b0100 {

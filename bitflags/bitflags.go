@@ -1,28 +1,20 @@
 package bitflags
 
 // import "fmt"
-const BITFIELD_SIZE = 64
+type BitsBlock uint64
 
-type BitFlags uint64
+const (
+	BitsBlock_SIZE  = 64
+	BitsBlock_EMPTY = BitsBlock(0)
+	BitsBlock_FULL  = BitsBlock(0xFFFF_FFFF_FFFF_FFFF)
+)
 
-// const (
-//
-//	F0 BitField = 1 << iota
-//	F1
-//	F2
-//
-// )
-// const BITFIELD_ONE = BitField(1)
-
-const BITFIELD_EMPTY = BitFlags(0)
-const BITFIELD_FULL = BitFlags(0xFFFF_FFFF_FFFF_FFFF)
-
-func (b BitFlags) Set(pos int) BitFlags          { return 1<<pos | b }
-func (b BitFlags) Clear(pos int) BitFlags        { return ^(1 << pos) & b }
-func (b BitFlags) Toggle(pos int) BitFlags       { return 1<<pos ^ b }
-func (b BitFlags) Has(pos int) bool              { return 1<<pos&b != 0 }
-func (b BitFlags) Union(o BitFlags) BitFlags     { return b | o }
-func (b BitFlags) Intersect(o BitFlags) BitFlags { return b & o }
+func (b BitsBlock) Set(pos int) BitsBlock           { return 1<<pos | b }
+func (b BitsBlock) Clear(pos int) BitsBlock         { return ^(1 << pos) & b }
+func (b BitsBlock) Toggle(pos int) BitsBlock        { return 1<<pos ^ b }
+func (b BitsBlock) Has(pos int) bool                { return 1<<pos&b != 0 }
+func (b BitsBlock) Union(o BitsBlock) BitsBlock     { return b | o }
+func (b BitsBlock) Intersect(o BitsBlock) BitsBlock { return b & o }
 
 // func Set(b, flag BitField) BitField    { return b | flag }
 // func Clear(b, flag BitField) BitField  { return b &^ flag }
