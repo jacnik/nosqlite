@@ -34,9 +34,9 @@ const (
 	BitFlagsCap = BitsBlockSize * BitsBlockSize
 )
 
-type BitFlags struct {
-	active BitsBlock
-	blocks []BitsBlock
+type BitFlags struct { // like BitBlock but can hold up ints in [0, 64*64) range
+	activeMask BitsBlock
+	blocks     []BitsBlock
 }
 
 func divmod(numerator, denominator uint) (quotient, remainder uint) {
@@ -51,12 +51,41 @@ func (b *BitFlags) resizeBlocks() {
 	}
 }
 
-func (b *BitFlags) Set(pos uint) {
-	blockIndex, blockPos := divmod(pos, BitsBlockSize)
+func (b *BitFlags) Set(positions ...uint) {
 	b.resizeBlocks()
+	for _, pos := range positions {
+		blockIndex, blockPos := divmod(pos, BitsBlockSize)
 
-	b.active = b.active.Set(blockIndex)
-	b.blocks[blockIndex] = b.blocks[blockIndex].Set(blockPos)
+		b.activeMask = b.activeMask.Set(blockIndex)
+		b.blocks[blockIndex] = b.blocks[blockIndex].Set(blockPos)
+	}
+}
+
+func (b BitFlags) Traverse() []uint {
+	sizeGuess := b.activeMask.Popcount() * 32
+	res := make([]uint, 0, sizeGuess)
+
+	mask := b.activeMask
+	for blockIndex := 0; blockIndex < BitsBlockSize; blockIndex++ {
+		if mask == 0 {
+			break
+		}
+		if mask&1 == 1 {
+			block := b.blocks[blockIndex]
+			for blockPos := 0; blockPos < BitsBlockSize; blockPos++ {
+				if block == 0 {
+					break
+				}
+				if block&1 == 1 {
+					res = append(res, uint(blockIndex)*BitsBlockSize+uint(blockPos))
+				}
+				block = block >> 1
+			}
+		}
+		mask = mask >> 1
+	}
+
+	return res
 }
 
 // https://itecnote.com/tecnote/go-how-would-you-set-and-clear-a-single-bit-in-go/

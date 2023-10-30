@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// Check if bits are Set correctly.
+// BitsBlock: Check if bits are Set correctly.
 func TestCorrectlySetsBit(t *testing.T) {
 	b := BitsBlockEmpty
 
@@ -26,7 +26,7 @@ func TestCorrectlySetsBit(t *testing.T) {
 	}
 }
 
-// Check if bits are Cleared correctly.
+// BitsBlock: Check if bits are Cleared correctly.
 func TestCorrectlyClearsBit(t *testing.T) {
 	b := BitsBlock(0b1101)
 
@@ -48,7 +48,7 @@ func TestCorrectlyClearsBit(t *testing.T) {
 	}
 }
 
-// Check if bits are Toggled correctly.
+// BitsBlock: Check if bits are Toggled correctly.
 func TestCorrectlyToggledBit(t *testing.T) {
 	b := BitsBlock(0b1101)
 
@@ -80,7 +80,7 @@ func TestCorrectlyToggledBit(t *testing.T) {
 	}
 }
 
-// Check if bits are checked correctly.
+// BitsBlock: Check if bits are checked correctly.
 func TestCorrectlyChecksBit(t *testing.T) {
 	b := BitsBlock(0b1101)
 
@@ -101,7 +101,7 @@ func TestCorrectlyChecksBit(t *testing.T) {
 	}
 }
 
-// Check if bit flags are unioned correctly.
+// BitsBlock: Check if bit flags are unioned correctly.
 func TestCorrectlyUnionBitFlags(t *testing.T) {
 	b := BitsBlock(0b1101)
 
@@ -111,7 +111,7 @@ func TestCorrectlyUnionBitFlags(t *testing.T) {
 	}
 }
 
-// Check if bit flags are intersected correctly.
+// BitsBlock: Check if bit flags are intersected correctly.
 func TestCorrectlyIntersectBitFlags(t *testing.T) {
 	b := BitsBlock(0b1101)
 
@@ -121,6 +121,7 @@ func TestCorrectlyIntersectBitFlags(t *testing.T) {
 	}
 }
 
+// BitsBlock: Check if correctly counts set bits.
 func TestCorrectlyCountSetBits(t *testing.T) {
 	assert := func(b BitsBlock, popcount uint) {
 		if b.Popcount() != popcount {
@@ -135,4 +136,38 @@ func TestCorrectlyCountSetBits(t *testing.T) {
 	assert(BitsBlock(0b0110_1111), 6)
 	assert(BitsBlock(0b1101_0110_1111), 9)
 	assert(BitsBlockFull, BitsBlockSize)
+}
+
+func compareSlices(a, b []uint) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if b[i] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// BitFlags: Check if correctly counts set bits.
+func TestSetAndTraverseBitFlags(t *testing.T) {
+	assert := func(f BitFlags, expected []uint) {
+		actual := f.Traverse()
+		if !compareSlices(actual, expected) {
+			t.Fatalf("Expected array different than actual:\n%v\n%v\n", expected, actual)
+		}
+	}
+
+	f := BitFlags{}
+	f.Set(1, 64, 129, 64*3+18, 64*3+20, 64*64-1)
+	assert(f, []uint{1, 64, 129, 64*3 + 18, 64*3 + 20, 64*64 - 1})
+
+	w := BitFlags{}
+	allIndexes := make([]uint, 64*64)
+	for i := uint(0); i < 64*64; i++ {
+		allIndexes[i] = i
+		w.Set(i)
+	}
+	assert(w, allIndexes)
 }
