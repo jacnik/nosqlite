@@ -61,24 +61,46 @@ func (b *BitFlags) Set(positions ...uint) {
 	}
 }
 
-func (b BitFlags) Traverse() []uint {
+func (b BitFlags) Traverse() <-chan uint {
 	sizeGuess := b.activeMask.Popcount() * 32
-	res := make([]uint, 0, sizeGuess)
+	res := make(chan uint, sizeGuess)
 
-	mask := b.activeMask
-	for blockIndex := 0; mask != 0; blockIndex, mask = blockIndex+1, mask>>1 {
-		if mask&1 == 1 {
-			block := b.blocks[blockIndex]
-			for blockPos := 0; block != 0; blockPos, block = blockPos+1, block>>1 {
-				if block&1 == 1 {
-					res = append(res, uint(blockIndex)*BitsBlockSize+uint(blockPos))
+	go func() {
+		mask := b.activeMask
+		for blockIndex := 0; mask != 0; blockIndex, mask = blockIndex+1, mask>>1 {
+			if mask&1 == 1 {
+				block := b.blocks[blockIndex]
+				for blockPos := 0; block != 0; blockPos, block = blockPos+1, block>>1 {
+					if block&1 == 1 {
+						res <- uint(blockIndex)*BitsBlockSize + uint(blockPos)
+					}
 				}
 			}
 		}
-	}
+		close(res)
+	}()
 
 	return res
 }
+
+// func (b BitFlags) Traverse() []uint {
+// 	sizeGuess := b.activeMask.Popcount() * 32
+// 	res := make([]uint, 0, sizeGuess)
+
+// 	mask := b.activeMask
+// 	for blockIndex := 0; mask != 0; blockIndex, mask = blockIndex+1, mask>>1 {
+// 		if mask&1 == 1 {
+// 			block := b.blocks[blockIndex]
+// 			for blockPos := 0; block != 0; blockPos, block = blockPos+1, block>>1 {
+// 				if block&1 == 1 {
+// 					res = append(res, uint(blockIndex)*BitsBlockSize+uint(blockPos))
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	return res
+// }
 
 // https://itecnote.com/tecnote/go-how-would-you-set-and-clear-a-single-bit-in-go/
 // http://graphics.stanford.edu/~seander/bithacks.html

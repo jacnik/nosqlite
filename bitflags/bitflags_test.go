@@ -138,14 +138,16 @@ func TestCorrectlyCountSetBits(t *testing.T) {
 	assert(BitsBlockFull, BitsBlockSize)
 }
 
-func compareSlices(a, b []uint) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
+func compareRanges(a <-chan uint, b []uint) bool {
+	i := 0
+	for v := range a {
 		if b[i] != v {
 			return false
 		}
+		i++
+	}
+	if i < len(b) {
+		return false
 	}
 	return true
 }
@@ -154,8 +156,8 @@ func compareSlices(a, b []uint) bool {
 func TestSetAndTraverseBitFlags(t *testing.T) {
 	assert := func(f BitFlags, expected []uint) {
 		actual := f.Traverse()
-		if !compareSlices(actual, expected) {
-			t.Fatalf("Expected array different than actual:\n%v\n%v\n", expected, actual)
+		if !compareRanges(actual, expected) {
+			t.Fatalf("Expected range different than actual:\n%v\n", expected)
 		}
 	}
 
