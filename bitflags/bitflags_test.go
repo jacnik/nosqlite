@@ -1,7 +1,6 @@
 package bitflags
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -136,61 +135,4 @@ func TestCorrectlyCountSetBits(t *testing.T) {
 	assert(BitsBlock(0b0110_1111), 6)
 	assert(BitsBlock(0b1101_0110_1111), 9)
 	assert(BitsBlockFull, BitsBlockSize)
-}
-
-func TestCorrectlyCountSetBits__(t *testing.T) {
-	b := int8(0b0000_1101)
-
-	fmt.Printf("%08b\n", 0x55) // 0101_0101
-	fmt.Printf("%08b\n", 0x33) // 0011_0011
-	fmt.Printf("%08b\n", 0x0F) // 0000_1111
-
-	fmt.Printf("\n")
-	fmt.Printf("b>>1 \t\t %08b\n", b>>1)                 // 0000_0110
-	fmt.Printf("(b>>1)&0x55 \t %08b\n", (b>>1)&0x55)     // 0000_0100
-	fmt.Printf("b-(b>>1)&0x55 \t %08b\n", b-(b>>1)&0x55) // 0000_1001
-	b = b - (b>>1)&0x55
-	fmt.Printf("b>>2 \t\t\t\t %08b\n", b>>2)                                 // 0000_0010
-	fmt.Printf("(b>>2)&0x33 \t\t\t %08b\n", (b>>2)&0x33)                     // 0000_0010
-	fmt.Printf("b&0x33 \t\t\t\t %08b\n", b&0x33)                             // 0000_0001
-	fmt.Printf("(b&0x33) + ((b>>2)&0x33) \t %08b\n", (b&0x33)+((b>>2)&0x33)) // 0000_0011
-	/*
-		0000_0000 -
-		0000_0100 =
-		1111_1100
-
-		0000_1101 +
-		1111_1100 =
-		0000_1001
-	*/
-	fmt.Printf("\n")
-	x, y := int8(0b0000_1110), int8(0b0000_0110)
-	fmt.Printf("%08b - \n%08b = \n%08b\n", x, y, x-y)
-
-	fmt.Printf("\n")
-	/*
-	 3 = 0000_0011 -> -3 = 1111_1101
-	 6 - 3 = 6 + (-3)
-	 0000_0110 +
-	 1111_1101 =
-	 0000_0011
-	*/
-	// fmt.Printf("%8b\n", int8(-3))
-
-	b = b - ((b >> 1) & 0x55)          // reuse input as temporary
-	b = (b & 0x33) + ((b >> 2) & 0x33) // temp
-	// c := ((b + (b>>4)&0xF0) * 0x10) >> 24 // count
-
-	if 3 != 3 {
-		t.Fatalf("Expected 3 bits to be set, got %d.\n", 1)
-	}
-
-	// 32 bit version below
-	// b = b - ((b >> 1) & 0x55555555)                 // reuse input as temporary
-	// b = (b & 0x33333333) + ((b >> 2) & 0x33333333)  // temp
-	// c := ((b + (b>>4)&0xF0F0F0F) * 0x1010101) >> 24 // count
-
-	// if c != 3 {
-	// 	t.Fatalf("Expected 3 bits to be set, got %d.\n", c)
-	// }
 }

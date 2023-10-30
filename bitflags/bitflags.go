@@ -6,6 +6,14 @@ const (
 	BitsBlockSize  = 64
 	BitsBlockEmpty = BitsBlock(0)
 	BitsBlockFull  = BitsBlock(0xFFFF_FFFF_FFFF_FFFF)
+
+	m1  = BitsBlock(0x5555555555555555) //binary: 0101...
+	m2  = BitsBlock(0x3333333333333333) //binary: 00110011..
+	m4  = BitsBlock(0x0f0f0f0f0f0f0f0f) //binary:  4 zeros,  4 ones ...
+	m8  = BitsBlock(0x00ff00ff00ff00ff) //binary:  8 zeros,  8 ones ...
+	m16 = BitsBlock(0x0000ffff0000ffff) //binary: 16 zeros, 16 ones ...
+	m32 = BitsBlock(0x00000000ffffffff) //binary: 32 zeros, 32 ones
+	h01 = BitsBlock(0x0101010101010101) //the sum of 256 to the power of 0,1,2,3...
 )
 
 func (b BitsBlock) Set(pos uint) BitsBlock          { return 1<<pos | b }
@@ -15,12 +23,11 @@ func (b BitsBlock) Has(pos uint) bool               { return 1<<pos&b != 0 }
 func (b BitsBlock) Union(o BitsBlock) BitsBlock     { return b | o }
 func (b BitsBlock) Intersect(o BitsBlock) BitsBlock { return b & o }
 func (b BitsBlock) Popcount() uint {
-	count := uint(0)
-	for b != 0 {
-		b = b & (b - 1)
-		count++
-	}
-	return count
+	b -= (b >> 1) & m1             //put count of each 2 bits into those 2 bits
+	b = (b & m2) + ((b >> 2) & m2) //put count of each 4 bits into those 4 bits
+	b = (b + (b >> 4)) & m4        //put count of each 8 bits into those 8 bits
+	return uint((b * h01) >> 56)   //returns left 8 bits of x + (x<<8) + (x<<16) + (x<<24) + ...
+	// https://en.wikipedia.org/wiki/Hamming_weight
 }
 
 const (
