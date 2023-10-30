@@ -159,6 +159,9 @@ func TestSetAndTraverseBitFlags(t *testing.T) {
 		}
 	}
 
+	o := BitFlags{}
+	assert(o, []uint{})
+
 	f := BitFlags{}
 	f.Set(1, 64, 129, 64*3+18, 64*3+20, 64*64-1)
 	assert(f, []uint{1, 64, 129, 64*3 + 18, 64*3 + 20, 64*64 - 1})

@@ -66,23 +66,15 @@ func (b BitFlags) Traverse() []uint {
 	res := make([]uint, 0, sizeGuess)
 
 	mask := b.activeMask
-	for blockIndex := 0; blockIndex < BitsBlockSize; blockIndex++ {
-		if mask == 0 {
-			break
-		}
+	for blockIndex := 0; mask != 0; blockIndex, mask = blockIndex+1, mask>>1 {
 		if mask&1 == 1 {
 			block := b.blocks[blockIndex]
-			for blockPos := 0; blockPos < BitsBlockSize; blockPos++ {
-				if block == 0 {
-					break
-				}
+			for blockPos := 0; block != 0; blockPos, block = blockPos+1, block>>1 {
 				if block&1 == 1 {
 					res = append(res, uint(blockIndex)*BitsBlockSize+uint(blockPos))
 				}
-				block = block >> 1
 			}
 		}
-		mask = mask >> 1
 	}
 
 	return res
