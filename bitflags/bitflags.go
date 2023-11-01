@@ -43,6 +43,24 @@ func (b BitsBlock) Traverse() <-chan uint {
 
 	return res
 }
+
+/* Return position (0, 1, ...) of rightmost (least-significant) one bit in n.
+ *
+ * This code uses a 32-bit version of algorithm to find the rightmost
+ * one bit in Knuth, _The Art of Computer Programming_, volume 4A
+ * (draft fascicle), section 7.1.3, "Bitwise tricks and
+ * techniques."
+ *
+ * Assumes n has a 1 bit, i.e. n != 0
+ *
+ */
+// TODO 32 bit alternative to lsb
+//  func rightone32(n uint32) uint32 {
+// 	a := uint32(0x05f66a47) /* magic number, found by brute force */
+// 	decode := [32]uint32{0, 1, 2, 26, 23, 3, 15, 27, 24, 21, 19, 4, 12, 16, 28, 6, 31, 25, 22, 14, 20, 18, 11, 5, 30, 13, 17, 10, 29, 9, 8, 7}
+// 	n = a * (n & (-n))
+// 	return decode[n>>27]
+// }
 func (b BitsBlock) Lsb() BitsBlock      { return b & -b }      // Clear all except lowest set bit
 func (b BitsBlock) ClearLsb() BitsBlock { return b ^ b.Lsb() } // Clear lowest set bit
 
@@ -61,31 +79,31 @@ func divmod(numerator, denominator uint) (quotient, remainder uint) {
 	return
 }
 
-func (b *BitFlags) resizeBlocks() {
-	if len(b.blocks) == 0 {
-		b.blocks = make([]BitsBlock, BitsBlockSize)
-	}
-}
-
-func (b *BitFlags) Set(positions ...uint) {
-	b.resizeBlocks()
-	for _, pos := range positions {
-		blockIndex, blockPos := divmod(pos, BitsBlockSize)
-
+func (b *BitFlags) resizeBlocks(blockIndex uint) (newIndex uint) {
+	if !b.activeMask.Has(blockIndex) {
+		b.blocks = append(b.blocks, BitsBlockEmpty)
 		b.activeMask = b.activeMask.Set(blockIndex)
+	}
+	return uint(len(b.blocks) - 1)
+}
+func (b *BitFlags) Set(positions ...uint) { // TODO Set assumes increasing arguments order
+	for _, pos := range positions {
+		blockMultiplier, blockPos := divmod(pos, BitsBlockSize)
+		blockIndex := b.resizeBlocks(blockMultiplier)
 		b.blocks[blockIndex] = b.blocks[blockIndex].Set(blockPos)
 	}
 }
-
 func (b BitFlags) Traverse() <-chan uint {
 	sizeGuess := b.activeMask.Popcount() * 32
 	res := make(chan uint, sizeGuess)
 
 	go func() {
-		for blockIndex := range b.activeMask.Traverse() {
+		blockIndex := 0
+		for blockMultiplier := range b.activeMask.Traverse() {
 			for blockPos := range b.blocks[blockIndex].Traverse() {
-				res <- blockIndex*BitsBlockSize + blockPos
+				res <- blockMultiplier*BitsBlockSize + blockPos
 			}
+			blockIndex++
 		}
 		close(res)
 	}()
