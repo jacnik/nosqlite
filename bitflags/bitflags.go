@@ -29,13 +29,18 @@ func (b BitsBlock) Popcount() uint {
 	return uint((b * h01) >> 56)   //returns left 8 bits of x + (x<<8) + (x<<16) + (x<<24) + ...
 	// https://en.wikipedia.org/wiki/Hamming_weight
 }
-func (b BitsBlock) Traverse() []uint {
-	res := make([]uint, 0, 32)
-	for i := 0; b != 0; i, b = i+1, b>>1 {
-		if b&1 == 1 {
-			res = append(res, uint(i))
+func (b BitsBlock) Traverse() <-chan uint {
+	res := make(chan uint, BitsBlockSize/2)
+
+	go func() {
+		for i := uint(0); b != 0; i, b = i+1, b>>1 {
+			if b&1 == 1 {
+				res <- i
+			}
 		}
-	}
+		close(res)
+	}()
+
 	return res
 }
 func (b BitsBlock) Lsb() BitsBlock      { return b & -b }      // Clear all except lowest set bit
@@ -77,8 +82,8 @@ func (b BitFlags) Traverse() <-chan uint {
 	res := make(chan uint, sizeGuess)
 
 	go func() {
-		for _, blockIndex := range b.activeMask.Traverse() {
-			for _, blockPos := range b.blocks[blockIndex].Traverse() {
+		for blockIndex := range b.activeMask.Traverse() {
+			for blockPos := range b.blocks[blockIndex].Traverse() {
 				res <- blockIndex*BitsBlockSize + blockPos
 			}
 		}
