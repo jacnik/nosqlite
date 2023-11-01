@@ -138,6 +138,34 @@ func TestCorrectlyCountSetBits(t *testing.T) {
 	assert(BitsBlockFull, BitsBlockSize)
 }
 
+// BitsBlock: Check if correctly returns lowest set bits.
+func TestCorrectlyReturnsLowestSetBit(t *testing.T) {
+	assertLsb := func(b, expected BitsBlock) {
+		if b.Lsb() != expected {
+			t.Fatalf("Expected lowest set bit to be: %04b, got: %04b.\n", expected, b.Lsb())
+		}
+	}
+	assertLsb(0b0, 0b0)
+	assertLsb(0b1101, 0b1)
+	assertLsb(0b1010, 0b10)
+	assertLsb(0b1100, 0b100)
+	assertLsb(0b1000, 0b1000)
+}
+
+// BitsBlock: Check if correctly clears lowest set bits.
+func TestCorrectlyClearsLowestSetBit(t *testing.T) {
+	assertClearLsb := func(b, expected BitsBlock) {
+		if b.ClearLsb() != expected {
+			t.Fatalf("Expected lowest set bit to be: %04b, got: %04b.\n", expected, b.ClearLsb())
+		}
+	}
+	assertClearLsb(0b0, 0b0)
+	assertClearLsb(0b1000, 0b0)
+	assertClearLsb(0b1101, 0b1100)
+	assertClearLsb(0b1010, 0b1000)
+	assertClearLsb(0b1100, 0b1000)
+}
+
 func compareRanges(a <-chan uint, b []uint) bool {
 	i := 0
 	for v := range a {

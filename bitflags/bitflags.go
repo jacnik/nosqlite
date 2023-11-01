@@ -38,6 +38,8 @@ func (b BitsBlock) Traverse() []uint {
 	}
 	return res
 }
+func (b BitsBlock) Lsb() BitsBlock      { return b & -b }      // Clear all except lowest set bit
+func (b BitsBlock) ClearLsb() BitsBlock { return b ^ b.Lsb() } // Clear lowest set bit
 
 const (
 	BitFlagsCap = BitsBlockSize * BitsBlockSize
