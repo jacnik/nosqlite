@@ -204,3 +204,78 @@ func TestSetAndTraverseBitFlags(t *testing.T) {
 	}
 	assert(w, allIndexes)
 }
+
+func compareBitsBlocks(a, b []BitsBlock) bool {
+	i := 0
+	for _, v := range a {
+		if b[i] != v {
+			return false
+		}
+		i++
+	}
+	if i < len(b) {
+		return false
+	}
+	return true
+}
+
+func compareBitFlags(a, b BitFlags) bool {
+	if a.activeMask != b.activeMask {
+		return false
+	}
+	return compareBitsBlocks(a.blocks, b.blocks)
+}
+
+// BitFlags: Check if correctly union bits flags.
+func TestUnionBitFlags(t *testing.T) {
+	assert := func(expected, actual BitFlags) {
+		if !compareBitFlags(expected, actual) {
+			t.Fatalf("Expected BitFlags different than actual:\n%v\n%v\n", expected, actual)
+		}
+	}
+
+	assert(BitFlags{}.Union(BitFlags{}), BitFlags{})
+
+	a, b := BitFlags{}, BitFlags{}
+	a.Set(0)
+	assert(a.Union(b), BitFlags{activeMask: 1, blocks: []BitsBlock{1}})
+
+	a, b = BitFlags{}, BitFlags{}
+	a.Set(1)
+	assert(a.Union(b), BitFlags{activeMask: 1, blocks: []BitsBlock{2}})
+
+	a, b = BitFlags{}, BitFlags{}
+	a.Set(2)
+	b.Set(3)
+	assert(a.Union(b), BitFlags{activeMask: 1, blocks: []BitsBlock{0b1100}})
+
+	a, b = BitFlags{}, BitFlags{}
+	a.Set(3)
+	b.Set(3)
+	assert(a.Union(b), BitFlags{activeMask: 1, blocks: []BitsBlock{0b1000}})
+}
+
+// func TestDivideBy32(t *testing.T) {
+// testDivBy32 := func() {
+// 	// Dividing by 32 is the same as bit shift left by 5
+// 	for n := 0; n <= 0b11111111_11111111_11111111_11111111; n++ {
+// 		if n/32 != n>>5 {
+// 			fmt.Printf("Difference for n = %d\n%08b\n%08b\n", n, n/32, n>>5)
+// 			t.Fatalf("Difference for n = %d\n%08b\n%08b\n", n, n/32, n>>5)
+// 		}
+// 	}
+// }
+// testDivBy32()
+
+// testModBy32 := func() {
+// 	// Mod by 32 is the same as binary and with 31
+// 	m := 0b11111 // 31 0x1F
+// 	for n := 0; n <= 0b11111111_11111111_11111111_11111111; n++ {
+// 		v := n & m
+// 		if v != n%32 {
+// 			t.Fatalf("Difference for n = %d\n%08b\n%08b\n", n, n%32, v)
+// 		}
+// 	}
+// }
+// testModBy32()
+// }

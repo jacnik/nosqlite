@@ -110,6 +110,56 @@ func (b BitFlags) Traverse() <-chan uint {
 
 	return res
 }
+func (b BitFlags) Union(o BitFlags) BitFlags {
+	appendToRes := func(res BitFlags, blocks []BitsBlock) BitFlags {
+		for _, block := range blocks {
+			res.blocks = append(res.blocks, block)
+		}
+		return res
+	}
+
+	res := BitFlags{
+		activeMask: b.activeMask.Union(o.activeMask),
+		blocks:     make([]BitsBlock, 0, len(b.blocks)),
+	}
+	bChan, oChan := b.activeMask.Traverse(), o.activeMask.Traverse()
+	bBlockIdx, moreB := <-bChan
+	oBlockIdx, moreO := <-oChan
+	bi, oi := 0, 0
+
+	for {
+		if !moreB {
+			return appendToRes(res, o.blocks[oi:])
+		}
+		if !moreO {
+			return appendToRes(res, b.blocks[bi:])
+		}
+		if bBlockIdx == oBlockIdx {
+			res.blocks = append(res.blocks, b.blocks[bi].Union(o.blocks[oi]))
+			bBlockIdx, moreB = <-bChan
+			oBlockIdx, moreO = <-oChan
+			bi++
+			oi++
+			continue
+		}
+		if bBlockIdx < oBlockIdx {
+			res.blocks = append(res.blocks, b.blocks[bi])
+			bBlockIdx, moreB = <-bChan
+			bi++
+			continue
+		}
+		if bBlockIdx > oBlockIdx {
+			res.blocks = append(res.blocks, o.blocks[oi])
+			oBlockIdx, moreO = <-oChan
+			oi++
+			continue
+		}
+	}
+}
+func (b BitFlags) Intersect(o BitFlags) BitFlags {
+
+	return b
+}
 
 // func (b BitFlags) Traverse() []uint {
 // 	sizeGuess := b.activeMask.Popcount() * 32
