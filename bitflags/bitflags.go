@@ -157,8 +157,33 @@ func (b BitFlags) Union(o BitFlags) BitFlags {
 	}
 }
 func (b BitFlags) Intersect(o BitFlags) BitFlags {
+	maskIntersect := b.activeMask.Intersect(o.activeMask)
+	maskUnion := b.activeMask.Union(o.activeMask)
 
-	return b
+	res := BitFlags{
+		activeMask: maskIntersect,
+		blocks:     make([]BitsBlock, 0, maskIntersect.Popcount()),
+	}
+
+	bi, oi := 0, 0
+	for unionIdx := range maskUnion.Traverse() {
+		if maskIntersect.Has(unionIdx) {
+			blockIntersect := b.blocks[bi].Intersect(o.blocks[oi])
+			if blockIntersect == 0 {
+				res.activeMask = res.activeMask.Clear(unionIdx)
+			} else {
+				res.blocks = append(res.blocks, blockIntersect)
+			}
+		}
+		if b.activeMask.Has(unionIdx) {
+			bi++
+		}
+		if o.activeMask.Has(unionIdx) {
+			oi++
+		}
+	}
+
+	return res
 }
 
 // func (b BitFlags) Traverse() []uint {
