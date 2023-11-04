@@ -111,51 +111,29 @@ func (b BitFlags) Traverse() <-chan uint {
 	return res
 }
 func (b BitFlags) Union(o BitFlags) BitFlags {
-	appendToRes := func(res BitFlags, blocks []BitsBlock) BitFlags {
-		for _, block := range blocks {
-			res.blocks = append(res.blocks, block)
-		}
-		return res
-	}
+	maskUnion := b.activeMask.Union(o.activeMask)
 
 	res := BitFlags{
-		activeMask: b.activeMask.Union(o.activeMask),
-		blocks:     make([]BitsBlock, 0, len(b.blocks)),
+		activeMask: maskUnion,
+		blocks:     make([]BitsBlock, maskUnion.Popcount()),
 	}
-	bChan, oChan := b.activeMask.Traverse(), o.activeMask.Traverse()
-	bBlockIdx, moreB := <-bChan
-	oBlockIdx, moreO := <-oChan
-	bi, oi := 0, 0
 
-	for {
-		if !moreB {
-			return appendToRes(res, o.blocks[oi:])
-		}
-		if !moreO {
-			return appendToRes(res, b.blocks[bi:])
-		}
-		if bBlockIdx == oBlockIdx {
-			res.blocks = append(res.blocks, b.blocks[bi].Union(o.blocks[oi]))
-			bBlockIdx, moreB = <-bChan
-			oBlockIdx, moreO = <-oChan
+	bi, oi, resi := 0, 0, 0
+	for unionIdx := range maskUnion.Traverse() {
+		if b.activeMask.Has(unionIdx) {
+			res.blocks[resi] = res.blocks[resi].Union(b.blocks[bi])
 			bi++
+		}
+		if o.activeMask.Has(unionIdx) {
+			res.blocks[resi] = res.blocks[resi].Union(o.blocks[oi])
 			oi++
-			continue
 		}
-		if bBlockIdx < oBlockIdx {
-			res.blocks = append(res.blocks, b.blocks[bi])
-			bBlockIdx, moreB = <-bChan
-			bi++
-			continue
-		}
-		if bBlockIdx > oBlockIdx {
-			res.blocks = append(res.blocks, o.blocks[oi])
-			oBlockIdx, moreO = <-oChan
-			oi++
-			continue
-		}
+		resi++
 	}
+
+	return res
 }
+
 func (b BitFlags) Intersect(o BitFlags) BitFlags {
 	maskIntersect := b.activeMask.Intersect(o.activeMask)
 	maskUnion := b.activeMask.Union(o.activeMask)
