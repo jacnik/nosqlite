@@ -125,7 +125,7 @@ func compareRefs(a, b fileRefs) bool {
 // Check if it can return file idx list for simple string query.
 func TestQueryIndexForString(t *testing.T) {
 	index := ReadIndex("./db")
-	refs := getFileRefs(&index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"})
+	refs := getFileRefs(&index, &valueQuery[string]{"/social/twitter", "https://twitter.com"})
 
 	expected := fileRefs{}
 	expected.Set(0, 1)
@@ -138,7 +138,7 @@ func TestQueryIndexForString(t *testing.T) {
 // Check if it can return file idx list for simple float query.
 func TestQueryIndexForFloat(t *testing.T) {
 	index := ReadIndex("./db")
-	refs := getFileRefs(&index, &valueQuery[float64]{"/age", FloatType, 23})
+	refs := getFileRefs(&index, &valueQuery[float64]{"/age", 23})
 
 	expected := fileRefs{}
 	expected.Set(0)

@@ -425,7 +425,6 @@ type valueTypes interface{ float64 | string }
 
 type valueQuery[T valueTypes] struct {
 	Key   string
-	Type  IndexEntryType
 	Value T
 }
 
@@ -455,8 +454,19 @@ func getFileRefs[T valueTypes](index *IndexT, query *valueQuery[T]) fileRefs {
 		return fr
 	}
 
+	queryType := func() IndexEntryType {
+		switch any(query.Value).(type) {
+		case string:
+			return StrType
+		case float64:
+			return FloatType
+		default:
+			panic("Got Unknown query.")
+		}
+	}
+
 	indexEntryCmp := func(entry IndexEntry, key string) int {
-		return valueWithTypeCmp(entry.key, key, entry.valueType, query.Type)
+		return valueWithTypeCmp(entry.key, key, entry.valueType, queryType())
 	}
 
 	valueRefCmp := func(valueRef ValueRefs, key T) int {
@@ -471,47 +481,6 @@ func getFileRefs[T valueTypes](index *IndexT, query *valueQuery[T]) fileRefs {
 	}
 	return refsArrTofileRefs(nil)
 }
-
-// func refsUnion(refs ...[]size_t) []size_t {
-// 	/* Result of AND operations on refs */
-// 	refsMask := bitflags.BitsBlockEmpty
-// 	for _, refsArr := range refs {
-// 		for _, ref := range refsArr {
-// 			refsMask = refsMask.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
-// 		}
-// 	}
-
-// 	res := make([]size_t, 0, bitflags.BitsBlockSize)
-
-// 	for i := 0; i < bitflags.BitsBlockSize; i++ {
-// 		if refsMask.Has(uint(i)) {
-// 			res = append(res, size_t(i))
-// 		}
-// 	}
-// 	return res
-// }
-
-// func refsIntersection(refs ...[]size_t) []size_t {
-// 	/* Result of OR operations on refs */
-// 	refsMask := bitflags.BitsBlockFull
-// 	for _, refsArr := range refs {
-// 		union := bitflags.BitsBlockEmpty
-// 		for _, ref := range refsArr {
-// 			union = union.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
-// 		}
-// 		refsMask = refsMask & union
-// 	}
-// 	// fmt.Printf("%b\n", refsMask)
-// 	res := make([]size_t, 0, bitflags.BitsBlockSize)
-
-// 	for i := 0; i < bitflags.BitsBlockSize; i++ {
-// 		if refsMask.Has(uint(i)) {
-// 			res = append(res, size_t(i))
-// 		}
-// 	}
-
-// 	return res
-// }
 
 // stack based refs operations: unions and intersections
 // *******>>
@@ -538,6 +507,20 @@ func (s *refStack) Or(f fileRefs) {
 	s.stack[l] = s.stack[l].Union(f)
 }
 
+type OpType byte
+
+const (
+	Push OpType = 'p'
+	And  OpType = 'a'
+	Or   OpType = 'o'
+)
+
+type Op struct {
+	Type     OpType
+	QueryKey string
+	QueryVal interface{}
+}
+
 // <<*******
 
 func QueryIndex(index *IndexT, query string) {
@@ -561,21 +544,20 @@ func QueryIndex(index *IndexT, query string) {
 
 	/* Example query SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' */
 	currStack := refStack{}
-	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
+	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", "https://twitter.com"}))
 	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.social.twitter = 'https://twitter.com'\n%v\n", refsToSlice(currStack.Pop()))
 
 	/* Example query SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com' */
 	currStack = refStack{}
-	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
-	currStack.And(getFileRefs(index, &valueQuery[string]{"/social/facebook", StrType, "https://facebook.com"}))
+	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", "https://twitter.com"}))
+	currStack.And(getFileRefs(index, &valueQuery[string]{"/social/facebook", "https://facebook.com"}))
 	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com'\n%v\n", refsToSlice(currStack.Pop()))
 
 	/* Example query SELECT * FROM c WHERE c.age = 23 OR c.age = 17 */
 	currStack = refStack{}
-	currStack.Push(getFileRefs(index, &valueQuery[float64]{"/age", FloatType, 23}))
-	currStack.Or(getFileRefs(index, &valueQuery[float64]{"/age", FloatType, 17}))
+	currStack.Push(getFileRefs(index, &valueQuery[float64]{"/age", 23}))
+	currStack.Or(getFileRefs(index, &valueQuery[float64]{"/age", 17}))
 	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.age = 23 OR c.age = 17\n%v\n", refsToSlice(currStack.Pop()))
-
 }
 
 func main() {
