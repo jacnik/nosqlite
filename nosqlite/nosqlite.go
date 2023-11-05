@@ -445,7 +445,16 @@ func queryForNullRefs(index *IndexT, query *nullQuery) []size_t {
 	return nil
 }
 
-func queryForRefs[T valueTypes](index *IndexT, query *valueQuery[T]) []size_t {
+func getFileRefs[T valueTypes](index *IndexT, query *valueQuery[T]) fileRefs {
+	// TODO propagate fileRefs = bitflags.BitFlags Type for file indexes throughout the project
+	refsArrTofileRefs := func(refs []size_t) fileRefs {
+		fr := fileRefs{}
+		for _, ref := range refs {
+			fr.Set(uint(ref))
+		}
+		return fr
+	}
+
 	indexEntryCmp := func(entry IndexEntry, key string) int {
 		return valueWithTypeCmp(entry.key, key, entry.valueType, query.Type)
 	}
@@ -457,63 +466,116 @@ func queryForRefs[T valueTypes](index *IndexT, query *valueQuery[T]) []size_t {
 	if entryIdx, found := slices.BinarySearchFunc(*index, query.Key, indexEntryCmp); found {
 		entry := (*index)[entryIdx]
 		if refIdx, found := slices.BinarySearchFunc(entry.values, query.Value, valueRefCmp); found {
-			return entry.values[refIdx].refs
+			return refsArrTofileRefs(entry.values[refIdx].refs)
 		}
 	}
-	return nil
+	return refsArrTofileRefs(nil)
 }
 
-func refsUnion(refs ...[]size_t) []size_t {
-	/* Result of AND operations on refs */
-	refsMask := bitflags.BitsBlockEmpty
-	for _, refsArr := range refs {
-		for _, ref := range refsArr {
-			refsMask = refsMask.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
-		}
-	}
+// func refsUnion(refs ...[]size_t) []size_t {
+// 	/* Result of AND operations on refs */
+// 	refsMask := bitflags.BitsBlockEmpty
+// 	for _, refsArr := range refs {
+// 		for _, ref := range refsArr {
+// 			refsMask = refsMask.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
+// 		}
+// 	}
 
-	res := make([]size_t, 0, bitflags.BitsBlockSize)
+// 	res := make([]size_t, 0, bitflags.BitsBlockSize)
 
-	for i := 0; i < bitflags.BitsBlockSize; i++ {
-		if refsMask.Has(uint(i)) {
-			res = append(res, size_t(i))
-		}
-	}
+// 	for i := 0; i < bitflags.BitsBlockSize; i++ {
+// 		if refsMask.Has(uint(i)) {
+// 			res = append(res, size_t(i))
+// 		}
+// 	}
+// 	return res
+// }
+
+// func refsIntersection(refs ...[]size_t) []size_t {
+// 	/* Result of OR operations on refs */
+// 	refsMask := bitflags.BitsBlockFull
+// 	for _, refsArr := range refs {
+// 		union := bitflags.BitsBlockEmpty
+// 		for _, ref := range refsArr {
+// 			union = union.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
+// 		}
+// 		refsMask = refsMask & union
+// 	}
+// 	// fmt.Printf("%b\n", refsMask)
+// 	res := make([]size_t, 0, bitflags.BitsBlockSize)
+
+// 	for i := 0; i < bitflags.BitsBlockSize; i++ {
+// 		if refsMask.Has(uint(i)) {
+// 			res = append(res, size_t(i))
+// 		}
+// 	}
+
+// 	return res
+// }
+
+// stack based refs operations: unions and intersections
+// *******>>
+type fileRefs = bitflags.BitFlags
+type refStack struct {
+	stack []fileRefs
+}
+
+func (s *refStack) Push(f fileRefs) {
+	s.stack = append(s.stack, f)
+}
+func (s *refStack) Pop() fileRefs {
+	l := len(s.stack) - 1
+	res := s.stack[l]
+	s.stack = s.stack[:l]
 	return res
 }
-
-func refsIntersection(refs ...[]size_t) []size_t {
-	/* Result of OR operations on refs */
-	refsMask := bitflags.BitsBlockFull
-	for _, refsArr := range refs {
-		union := bitflags.BitsBlockEmpty
-		for _, ref := range refsArr {
-			union = union.Union(bitflags.BitsBlockEmpty.Set(uint(ref)))
-		}
-		refsMask = refsMask & union
-	}
-	// fmt.Printf("%b\n", refsMask)
-	res := make([]size_t, 0, bitflags.BitsBlockSize)
-
-	for i := 0; i < bitflags.BitsBlockSize; i++ {
-		if refsMask.Has(uint(i)) {
-			res = append(res, size_t(i))
-		}
-	}
-
-	return res
+func (s *refStack) And(f fileRefs) {
+	l := len(s.stack) - 1
+	s.stack[l] = s.stack[l].Intersect(f)
 }
+func (s *refStack) Or(f fileRefs) {
+	l := len(s.stack) - 1
+	s.stack[l] = s.stack[l].Union(f)
+}
+
+// <<*******
 
 func QueryIndex(index *IndexT, query string) {
-	fmt.Println(queryForRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
-	fmt.Println(queryForRefs(index, &valueQuery[float64]{"/age", FloatType, 23}))
+	// fmt.Println(getFileRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
+	// fmt.Println(getFileRefs(index, &valueQuery[float64]{"/age", FloatType, 23}))
 
-	fmt.Println(queryForNullRefs(index, &nullQuery{"/now null behaves"}))
+	// fmt.Println(queryForNullRefs(index, &nullQuery{"/now null behaves"}))
 
-	for i, k := range queryForNullRefs(index, &nullQuery{"/not found"}) {
-		fmt.Println(i, k)
-		fmt.Println(queryForNullRefs(index, &nullQuery{"/not found"}))
+	// for i, k := range queryForNullRefs(index, &nullQuery{"/not found"}) {
+	// 	fmt.Println(i, k)
+	// 	fmt.Println(queryForNullRefs(index, &nullQuery{"/not found"}))
+	// }
+
+	refsToSlice := func(refs fileRefs) []uint {
+		refsSlice := make([]uint, 0, 32)
+		for av := range refs.Traverse() {
+			refsSlice = append(refsSlice, av)
+		}
+		return refsSlice
 	}
+
+	/* Example query SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' */
+	currStack := refStack{}
+	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
+	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.social.twitter = 'https://twitter.com'\n%v\n", refsToSlice(currStack.Pop()))
+
+	/* Example query SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com' */
+	currStack = refStack{}
+	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
+	currStack.And(getFileRefs(index, &valueQuery[string]{"/social/facebook", StrType, "https://facebook.com"}))
+	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com'\n%v\n", refsToSlice(currStack.Pop()))
+
+	/* Example query SELECT * FROM c WHERE c.age = 23 OR c.age = 17 */
+	currStack = refStack{}
+	currStack.Push(getFileRefs(index, &valueQuery[float64]{"/age", FloatType, 23}))
+	currStack.Or(getFileRefs(index, &valueQuery[float64]{"/age", FloatType, 17}))
+	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.age = 23 OR c.age = 17\n%v\n", refsToSlice(currStack.Pop()))
+
 }
 
 func main() {
@@ -525,13 +587,4 @@ func main() {
 
 	index := ReadIndex("./db")
 	QueryIndex(&index, "")
-
-	expected := []size_t{0, 1, 2, 3, 4, 5}
-	fmt.Println(expected[len(expected)-1])
-
-	// indexBytes := serializeIndex(index)
-	// fmt.Println(index)
-	// fmt.Println(len(indexBytes))
-
-	// fmt.Println("Are indexes equal:", index == deserializedIndex)
 }

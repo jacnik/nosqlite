@@ -109,14 +109,28 @@ func compareSlices[T comparable](a, b []T) bool {
 	return true
 }
 
+func compareRefs(a, b fileRefs) bool {
+	aslice := make([]uint, 0, 32)
+	for av := range a.Traverse() {
+		aslice = append(aslice, av)
+	}
+
+	bslice := make([]uint, 0, 32)
+	for bv := range b.Traverse() {
+		bslice = append(bslice, bv)
+	}
+	return compareSlices(aslice, bslice)
+}
+
 // Check if it can return file idx list for simple string query.
 func TestQueryIndexForString(t *testing.T) {
 	index := ReadIndex("./db")
-	refs := queryForRefs(&index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"})
+	refs := getFileRefs(&index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"})
 
-	expected := []size_t{0, 1}
+	expected := fileRefs{}
+	expected.Set(0, 1)
 
-	if !compareSlices(refs, expected) {
+	if !compareRefs(refs, expected) {
 		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
 	}
 }
@@ -124,11 +138,12 @@ func TestQueryIndexForString(t *testing.T) {
 // Check if it can return file idx list for simple float query.
 func TestQueryIndexForFloat(t *testing.T) {
 	index := ReadIndex("./db")
-	refs := queryForRefs(&index, &valueQuery[float64]{"/age", FloatType, 23})
+	refs := getFileRefs(&index, &valueQuery[float64]{"/age", FloatType, 23})
 
-	expected := []size_t{0}
+	expected := fileRefs{}
+	expected.Set(0)
 
-	if !compareSlices(refs, expected) {
+	if !compareRefs(refs, expected) {
 		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
 	}
 }
@@ -154,27 +169,5 @@ func TestQueryIndexForNonExisting(t *testing.T) {
 
 	if !compareSlices(refs, expected) {
 		t.Fatalf("Expected refs different than actual:\n%v\n%v", expected, refs)
-	}
-}
-
-// Check if refsUnion returns union of many ref arrays.
-func TestRefUnionForMany(t *testing.T) {
-	union := refsUnion([]size_t{0, 5, 6}, []size_t{0, 1, 4, 6}, []size_t{1, 2, 3, 4, 5, 6})
-
-	expected := []size_t{0, 1, 2, 3, 4, 5, 6}
-
-	if !compareSlices(union, expected) {
-		t.Fatalf("Expected refs union different than actual:\n%v\n%v", expected, union)
-	}
-}
-
-// Check if refsUnion returns intersection of many ref arrays.
-func TestRefIntersectionForMany(t *testing.T) {
-	intersection := refsIntersection([]size_t{0, 5, 6}, []size_t{0, 1, 4, 6}, []size_t{0, 2, 3, 4, 5, 6})
-
-	expected := []size_t{0, 6}
-
-	if !compareSlices(intersection, expected) {
-		t.Fatalf("Expected refs intersection different than actual:\n%v\n%v", expected, intersection)
 	}
 }
