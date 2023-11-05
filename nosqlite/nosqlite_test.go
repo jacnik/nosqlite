@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/jacnik/nosqlite/parser"
 )
 
 func compareValueRefs(expected, actual ValueRefs, valueType IndexEntryType) bool {
@@ -125,7 +127,7 @@ func compareRefs(a, b fileRefs) bool {
 // Check if it can return file idx list for simple string query.
 func TestQueryIndexForString(t *testing.T) {
 	index := ReadIndex("./db")
-	refs := getFileRefs(&index, &valueQuery[string]{"/social/twitter", "https://twitter.com"})
+	refs := getFileRefs(&index, "/social/twitter", parser.Eq, "https://twitter.com", StrType)
 
 	expected := fileRefs{}
 	expected.Set(0, 1)
@@ -138,7 +140,7 @@ func TestQueryIndexForString(t *testing.T) {
 // Check if it can return file idx list for simple float query.
 func TestQueryIndexForFloat(t *testing.T) {
 	index := ReadIndex("./db")
-	refs := getFileRefs(&index, &valueQuery[float64]{"/age", 23})
+	refs := getFileRefs(&index, "/age", parser.Eq, 23, FloatType)
 
 	expected := fileRefs{}
 	expected.Set(0)

@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"github.com/jacnik/bitflags"
+	"github.com/jacnik/nosqlite/parser"
 )
 
 type size_t uint32
@@ -421,13 +422,6 @@ func ReadIndex(dirPath string) IndexT { // TODO err
 	return index
 }
 
-type valueTypes interface{ float64 | string }
-
-type valueQuery[T valueTypes] struct {
-	Key   string
-	Value T
-}
-
 type nullQuery struct {
 	Key string
 }
@@ -444,7 +438,7 @@ func queryForNullRefs(index *IndexT, query *nullQuery) []size_t {
 	return nil
 }
 
-func getFileRefs[T valueTypes](index *IndexT, query *valueQuery[T]) fileRefs {
+func getFileRefs(index *IndexT, queryKey string, op parser.OpType, queryVal interface{}, queryType IndexEntryType) fileRefs {
 	// TODO propagate fileRefs = bitflags.BitFlags Type for file indexes throughout the project
 	refsArrTofileRefs := func(refs []size_t) fileRefs {
 		fr := fileRefs{}
@@ -454,28 +448,29 @@ func getFileRefs[T valueTypes](index *IndexT, query *valueQuery[T]) fileRefs {
 		return fr
 	}
 
-	queryType := func() IndexEntryType {
-		switch any(query.Value).(type) {
+	indexEntryCmp := func(entry IndexEntry, key string) int {
+		return valueWithTypeCmp(entry.key, key, entry.valueType, queryType)
+	}
+
+	valueRefCmp := func(valueRef ValueRefs, val interface{}) int {
+		switch v := val.(type) {
 		case string:
-			return StrType
+			return cmp.Compare(valueRef.value.(string), v)
+		case int:
+			return cmp.Compare(valueRef.value.(float64), float64(v))
 		case float64:
-			return FloatType
+			return cmp.Compare(valueRef.value.(float64), v)
+		case nil:
+			// TODO
+			return 0
 		default:
-			panic("Got Unknown query.")
+			panic("got unknown type")
 		}
 	}
 
-	indexEntryCmp := func(entry IndexEntry, key string) int {
-		return valueWithTypeCmp(entry.key, key, entry.valueType, queryType())
-	}
-
-	valueRefCmp := func(valueRef ValueRefs, key T) int {
-		return cmp.Compare(valueRef.value.(T), key)
-	}
-
-	if entryIdx, found := slices.BinarySearchFunc(*index, query.Key, indexEntryCmp); found {
+	if entryIdx, found := slices.BinarySearchFunc(*index, queryKey, indexEntryCmp); found {
 		entry := (*index)[entryIdx]
-		if refIdx, found := slices.BinarySearchFunc(entry.values, query.Value, valueRefCmp); found {
+		if refIdx, found := slices.BinarySearchFunc(entry.values, queryVal, valueRefCmp); found {
 			return refsArrTofileRefs(entry.values[refIdx].refs)
 		}
 	}
@@ -507,33 +502,9 @@ func (s *refStack) Or(f fileRefs) {
 	s.stack[l] = s.stack[l].Union(f)
 }
 
-type OpType byte
-
-const (
-	Push OpType = 'p'
-	And  OpType = 'a'
-	Or   OpType = 'o'
-)
-
-type Op struct {
-	Type     OpType
-	QueryKey string
-	QueryVal interface{}
-}
-
 // <<*******
 
 func QueryIndex(index *IndexT, query string) {
-	// fmt.Println(getFileRefs(index, &valueQuery[string]{"/social/twitter", StrType, "https://twitter.com"}))
-	// fmt.Println(getFileRefs(index, &valueQuery[float64]{"/age", FloatType, 23}))
-
-	// fmt.Println(queryForNullRefs(index, &nullQuery{"/now null behaves"}))
-
-	// for i, k := range queryForNullRefs(index, &nullQuery{"/not found"}) {
-	// 	fmt.Println(i, k)
-	// 	fmt.Println(queryForNullRefs(index, &nullQuery{"/not found"}))
-	// }
-
 	refsToSlice := func(refs fileRefs) []uint {
 		refsSlice := make([]uint, 0, 32)
 		for av := range refs.Traverse() {
@@ -542,22 +513,40 @@ func QueryIndex(index *IndexT, query string) {
 		return refsSlice
 	}
 
-	/* Example query SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' */
-	currStack := refStack{}
-	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", "https://twitter.com"}))
-	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.social.twitter = 'https://twitter.com'\n%v\n", refsToSlice(currStack.Pop()))
+	getQueryType := func(obj any) IndexEntryType {
+		switch obj.(type) {
+		case string:
+			return StrType
+		case float64:
+			return FloatType
+		case nil:
+			return NullType
+		default:
+			panic("Got Unknown query type.")
+		}
+	}
 
-	/* Example query SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com' */
-	currStack = refStack{}
-	currStack.Push(getFileRefs(index, &valueQuery[string]{"/social/twitter", "https://twitter.com"}))
-	currStack.And(getFileRefs(index, &valueQuery[string]{"/social/facebook", "https://facebook.com"}))
-	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com'\n%v\n", refsToSlice(currStack.Pop()))
+	program, err := parser.Parse(query)
+	check(err)
 
-	/* Example query SELECT * FROM c WHERE c.age = 23 OR c.age = 17 */
-	currStack = refStack{}
-	currStack.Push(getFileRefs(index, &valueQuery[float64]{"/age", 23}))
-	currStack.Or(getFileRefs(index, &valueQuery[float64]{"/age", 17}))
-	fmt.Printf("File refs for\nSELECT * FROM c WHERE c.age = 23 OR c.age = 17\n%v\n", refsToSlice(currStack.Pop()))
+	stack := refStack{}
+	for _, instruction := range program.Instructions {
+		queryType := getQueryType(instruction.QueryVal)
+		refs := getFileRefs(index, instruction.QueryKey, instruction.Op, instruction.QueryVal, queryType)
+
+		switch instruction.Type {
+		case parser.Push:
+			stack.Push(refs)
+		case parser.And:
+			stack.And(refs)
+		case parser.Or:
+			stack.Or(refs)
+		default:
+			panic("Unknown instruction type")
+		}
+	}
+
+	fmt.Printf("Refs:\n%v\n", refsToSlice(stack.Pop()))
 }
 
 func main() {
