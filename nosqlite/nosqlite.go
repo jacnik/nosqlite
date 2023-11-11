@@ -558,4 +558,8 @@ func main() {
 
 	index := ReadIndex("./db")
 	QueryIndex(&index, "")
+
+	// s := "SELECT *"
+	// fmt.Println(s[0:6])
+	// fmt.Println(s[0:math.Min(6, 10)])
 }
