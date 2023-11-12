@@ -1,5 +1,9 @@
 package parser
 
+import (
+	"strconv"
+)
+
 type OpType byte
 
 const (
@@ -76,7 +80,9 @@ const (
 	dot
 	eq
 	gt
+	lt
 	and
+	or
 )
 
 type token struct {
@@ -85,169 +91,148 @@ type token struct {
 }
 
 func tokenize(query string) []token {
-	return []token{
-		{sel, nil},
-		{star, nil},
-		token{from, nil},
-		token{ident, "c"},
-		token{where, nil},
-		token{ident, "c"},
-		token{dot, nil},
-		token{ident, "social"},
-		token{dot, nil},
-		token{ident, "twitter"},
-		token{eq, nil},
-		token{eq, nil},
-		token{text, "https://twitter.com"},
-		token{and, nil},
-		token{ident, "c"},
-		token{dot, nil},
-		token{ident, "age"},
-		token{gt, nil},
-		token{float, 17.0},
+	isWhitespace := func(query string, i int) bool {
+		spaces := []byte{' ', '\t', '\n'}
+		for _, s := range spaces {
+			if query[i] == s {
+				return true
+			}
+		}
+		return false
 	}
 
+	isIdentChar := func(query string, i int) (ok bool) {
+		c := query[i]
+		if c >= 'a' && c <= 'z' {
+			return true
+		}
+		if c >= 'A' && c <= 'Z' {
+			return true
+		}
+		if c == '_' {
+			return true
+		}
+		return false
+	}
+
+	classifyIdent := func(identifier string) token {
+
+		switch identifier {
+		case "SELECT":
+			return token{sel, nil}
+		case "FROM":
+			return token{from, nil}
+		case "WHERE":
+			return token{where, nil}
+		case "AND":
+			return token{and, nil}
+		case "OR":
+			return token{or, nil}
+
+		}
+
+		return token{ident, identifier}
+	}
+
+	appendIdent := func(tokens *[]token, query string, i int) (newPos int) {
+		j := i
+		for ; j < len(query) && isIdentChar(query, j); j++ {
+		}
+		if i != j {
+			*tokens = append(*tokens, classifyIdent(query[i:j]))
+		}
+
+		return j
+	}
+
+	appendSpecial := func(tokens *[]token, query string, i int) (newPos int) {
+		switch query[i] {
+		case '*':
+			*tokens = append(*tokens, token{star, nil})
+			return i + 1
+		case '.':
+			*tokens = append(*tokens, token{dot, nil})
+			return i + 1
+		case '=':
+			*tokens = append(*tokens, token{eq, nil})
+			return i + 1
+		case '>':
+			*tokens = append(*tokens, token{gt, nil})
+			return i + 1
+		case '<':
+			*tokens = append(*tokens, token{lt, nil})
+			return i + 1
+		}
+		return i
+	}
+
+	appendText := func(tokens *[]token, query string, i int) (newPos int) {
+		if query[i] != '\'' {
+			return i
+		}
+		for j := i + 1; j < len(query); j++ {
+			if query[j] == '\'' {
+				*tokens = append(*tokens, token{text, query[i+1 : j]})
+				return j + 1
+			}
+		}
+		return len(query)
+	}
+
+	appendNumber := func(tokens *[]token, query string, i int) (newPos int) {
+		// TODO floats starting with `.`, ints and negative numbers
+		isDigit := func(query string, i int) bool {
+			return query[i] >= '0' && query[i] <= '9'
+		}
+		if !isDigit(query, i) {
+			return i
+		}
+
+		dotsCount := 0
+		for j := i; j < len(query); j++ {
+			if query[j] == '.' {
+				dotsCount++
+				j++
+			}
+			if dotsCount > 1 {
+				panic("Invalid syntax. Too many dots in number") // TODO error
+			}
+			if !isDigit(query, j) {
+				if i == j {
+					return i
+				} else if f, err := strconv.ParseFloat(query[i:j], 64); err == nil {
+					*tokens = append(*tokens, token{float, f})
+					return j + 1
+				}
+				panic("Unable to cast to float")
+			}
+			if j >= len(query)-1 {
+				if f, err := strconv.ParseFloat(query[i:j], 64); err == nil {
+					*tokens = append(*tokens, token{float, f})
+					return j + 1
+				}
+			}
+		}
+
+		return i
+	}
+
+	tokens := make([]token, 0, 8)
+	for i := 0; ; {
+		if isWhitespace(query, i) {
+			i++
+		}
+
+		i = appendIdent(&tokens, query, i)
+		i = appendSpecial(&tokens, query, i)
+		i = appendText(&tokens, query, i)
+		i = appendNumber(&tokens, query, i)
+
+		if i >= len(query) {
+			tokens = append(tokens, token{eof, nil})
+			break
+		}
+	}
+
+	return tokens
 }
-
-// func tokenize(query string) []token {
-// 	min := func(x, y int) int {
-// 		if y < x {
-// 			return y
-// 		}
-// 		return x
-// 	}
-
-// 	isWhitespace := func(query string, i int) bool {
-// 		spaces := []byte{' ', '\t', '\n'}
-// 		for _, s := range spaces {
-// 			if query[i] == s {
-// 				return true
-// 			}
-// 		}
-// 		return false
-// 	}
-
-// 	isSpecialChar := func(query string, i int) (tokenType, bool) {
-// 		if i >= len(query) {
-// 			return eof, true
-// 		}
-
-// 		switch query[i] {
-// 		case '(':
-// 			return lparem, true
-// 		case ')':
-// 			return rparem, true
-// 		case '[':
-// 			return lsqbrack, true
-// 		case ']':
-// 			return rsqbrack, true
-// 		case '.':
-// 			return dot, true
-// 		case ',':
-// 			return comma, true
-// 		case '*':
-// 			return star, true
-// 		}
-
-// 		return eof, false
-// 	}
-
-// 	isTextChar := func(query string, i int) (newPos int, ok bool) {
-// 		c := query[i]
-// 		if c >= 'a' && c <= 'z' {
-// 			return i + 1, true
-// 		}
-// 		if c >= 'A' && c <= 'Z' {
-// 			return i + 1, true
-// 		}
-// 		if c == '_' || c == '-' {
-// 			return i + 1, true
-// 		}
-// 		return i, false
-// 	}
-
-// 	isDigitChar := func(query string, i int) (newPos int, ok bool) {
-// 		c := query[i]
-// 		if c >= '0' && c <= '9' {
-// 			return i + 1, true
-// 		}
-// 		if c == '.' || c == '-' {
-// 			return i + 1, true
-// 		}
-// 		return i, false
-// 	}
-
-// 	passWhitespace := func(query string, i int) int {
-// 		j := i
-// 		for ; j < len(query); j++ {
-// 			if !isWhitespace(query, j) {
-// 				return j
-// 			}
-// 		}
-// 		return j
-// 	}
-// 	readSelect := func(query string, i int) (int, *token) {
-// 		s := "SELECT"
-// 		l := len(s)
-
-// 		if query[i:min(len(query)-i, l)] == s {
-// 			return passWhitespace(query, i+l), &token{sel, s}
-// 		}
-// 		return i, nil
-// 	}
-
-// 	readSelections := func(query string, i int) (int, []token) {
-// 		res := make([]token, 0, 1)
-// 		i = passWhitespace(query, i)
-// 		if query[i] == '*' {
-// 			res = append(res, token{tokenType: star})
-// 			return passWhitespace(query, i+1), res
-// 		}
-// 		panic("selectors other than '*' are not supported yet.") // TODO
-// 	}
-
-// 	readFrom := func(query string, i int) (int, *token) {
-// 		s := "FROM"
-// 		l := len(s)
-
-// 		if query[i:min(len(query)-i, l)] == s {
-// 			return passWhitespace(query, i+l), &token{sel, s}
-// 		}
-// 		return i, nil
-// 	}
-
-// 	readText := func(query string, i int) (int, *token) {
-// 		i = passWhitespace(query, i)
-
-// 		for j := i; j < len(query); j++ {
-// 			if isWhitespace(query, j) {
-// 				return passWhitespace(query, j+1), &token{text, query[i:j]}
-// 			}
-// 		}
-
-// 		return len(query), &token{eof, nil}
-// 	}
-
-// 	/* SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com' */
-
-// 	tokens := make([]token, 0, 8)
-
-// 	for s := 0; s < len(query); {
-// 		i, t := readSelect(query, s) // SELECT
-// 		if t != nil {
-// 			tokens = append(tokens, *t)
-// 		}
-// 		i, ts := readSelections(query, i) // *
-// 		tokens = append(tokens, ts...)
-// 		i, t = readFrom(query, s) // FROM
-// 		tokens = append(tokens, *t)
-// 		i, t = readText(query, s) // c
-// 		tokens = append(tokens, *t)
-
-// 		// WHERE
-// 		// c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com'
-
-// 	}
-
-// 	return tokens
-// }
