@@ -4,61 +4,6 @@ import (
 	"strconv"
 )
 
-type OpType byte
-
-const (
-	Eq OpType = '='
-	Gt OpType = '>'
-	Lt OpType = '<'
-)
-
-type InstructionType byte
-
-const (
-	Push InstructionType = 'p'
-	And  InstructionType = 'a'
-	Or   InstructionType = 'o'
-)
-
-type Instruction struct {
-	Type     InstructionType
-	QueryKey string
-	Op       OpType
-	QueryVal interface{}
-}
-
-type Program struct {
-	Instructions []Instruction
-}
-
-// fmt.Println(queryForNullRefs(index, &nullQuery{"/now null behaves"}))
-
-// for i, k := range queryForNullRefs(index, &nullQuery{"/not found"}) {
-// 	fmt.Println(i, k)
-// 	fmt.Println(queryForNullRefs(index, &nullQuery{"/not found"}))
-// }
-
-func Parse(query string) (Program, error) {
-	/* SELECT * FROM c WHERE c.age = 23 OR c.age = 17 */
-	program := Program{Instructions: []Instruction{
-		{Push, "/age", Eq, 23},
-		{Or, "/age", Eq, 17},
-	}}
-
-	/* Example query SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' */
-	program = Program{Instructions: []Instruction{
-		{Push, "/social/twitter", Eq, "https://twitter.com"},
-	}}
-
-	/* SELECT * FROM c WHERE c.social.twitter = 'https://twitter.com' AND c.social.facebook = 'https://facebook.com' */
-	program = Program{Instructions: []Instruction{
-		{Push, "/social/twitter", Eq, "https://twitter.com"},
-		{And, "/social/facebook", Eq, "https://facebook.com"},
-	}}
-
-	return program, nil
-}
-
 type tokenType byte
 
 const (
@@ -70,7 +15,6 @@ const (
 	from
 	where
 	comma
-	//	operator
 	star
 	eof
 	lparem
@@ -90,7 +34,7 @@ type token struct {
 	value     any
 }
 
-func tokenize(query string) []token {
+func tokenize(query string) ([]token, error) {
 	isWhitespace := func(query string, i int) bool {
 		spaces := []byte{' ', '\t', '\n'}
 		for _, s := range spaces {
@@ -184,12 +128,13 @@ func tokenize(query string) []token {
 		isDigit := func(query string, i int) bool {
 			return query[i] >= '0' && query[i] <= '9'
 		}
-		if !isDigit(query, i) {
+
+		if i >= len(query)-1 || !isDigit(query, i) {
 			return i
 		}
 
 		dotsCount := 0
-		for j := i; j < len(query); j++ {
+		for j := i + 1; j < len(query); j++ {
 			if query[j] == '.' {
 				dotsCount++
 				j++
@@ -198,16 +143,14 @@ func tokenize(query string) []token {
 				panic("Invalid syntax. Too many dots in number") // TODO error
 			}
 			if !isDigit(query, j) {
-				if i == j {
-					return i
-				} else if f, err := strconv.ParseFloat(query[i:j], 64); err == nil {
+				if f, err := strconv.ParseFloat(query[i:j], 64); err == nil {
 					*tokens = append(*tokens, token{float, f})
 					return j + 1
 				}
 				panic("Unable to cast to float")
 			}
 			if j >= len(query)-1 {
-				if f, err := strconv.ParseFloat(query[i:j], 64); err == nil {
+				if f, err := strconv.ParseFloat(query[i:j+1], 64); err == nil {
 					*tokens = append(*tokens, token{float, f})
 					return j + 1
 				}
@@ -234,5 +177,110 @@ func tokenize(query string) []token {
 		}
 	}
 
-	return tokens
+	return tokens, nil
+}
+
+type OpType byte
+
+const (
+	Eq OpType = '='
+	Gt OpType = '>'
+	Lt OpType = '<'
+)
+
+type InstructionType byte
+
+const (
+	Push InstructionType = 'p'
+	And  InstructionType = 'a'
+	Or   InstructionType = 'o'
+)
+
+type Instruction struct {
+	Type     InstructionType
+	QueryKey string
+	Op       OpType
+	QueryVal interface{}
+}
+
+type Program struct {
+	Instructions []Instruction
+}
+
+// fmt.Println(queryForNullRefs(index, &nullQuery{"/now null behaves"}))
+
+// for i, k := range queryForNullRefs(index, &nullQuery{"/not found"}) {
+// 	fmt.Println(i, k)
+// 	fmt.Println(queryForNullRefs(index, &nullQuery{"/not found"}))
+// }
+
+func Parse(query string) (Program, error) {
+	readSelection := func(tokens []token) (int, int) {
+		// TODO implement selection
+		if tokens[0].tokenType != sel {
+			return 0, 0
+		}
+		for i := 1; i < len(tokens); i++ {
+			if tokens[i].tokenType == from {
+				return 0, i + 1
+			}
+		}
+
+		return 0, 0
+	}
+	readContainerAlias := func(tokens []token, i int) (string, int) {
+		if tokens[i].tokenType == ident {
+			return tokens[i].value.(string), i + 1
+		}
+		return "", i
+	}
+	readWhereClause := func(tokens []token, i int, containerAlias string) ([]Instruction, int) {
+		if tokens[i].tokenType != where {
+			return nil, i
+		}
+
+		clauses := make([]Instruction, 0, 4)
+		levelSep := "/"
+		keyBuilder := ""
+		op := Eq
+		cmd := Push
+		for i++; i < len(tokens); i++ {
+			if tokens[i] == (token{ident, containerAlias}) {
+				i++
+			}
+			if tokens[i].tokenType == dot {
+				keyBuilder += levelSep
+			}
+			if tokens[i].tokenType == ident {
+				keyBuilder += tokens[i].value.(string)
+			}
+			if tokens[i].tokenType == eq {
+				op = Eq
+			}
+			if tokens[i].tokenType == gt {
+				op = Gt
+			}
+			if tokens[i].tokenType == text || tokens[i].tokenType == float {
+				clauses = append(clauses, Instruction{cmd, keyBuilder, op, tokens[i].value})
+				keyBuilder = ""
+			}
+			if tokens[i].tokenType == and {
+				cmd = And
+			}
+			if tokens[i].tokenType == or {
+				cmd = Or
+			}
+		}
+		return clauses, i
+	}
+
+	tokens, err := tokenize(query)
+	if err != nil {
+		return Program{Instructions: nil}, err
+	}
+	_, i := readSelection(tokens) // TODO
+	containerAlias, i := readContainerAlias(tokens, i)
+	instructions, i := readWhereClause(tokens, i, containerAlias)
+
+	return Program{Instructions: instructions}, nil
 }
