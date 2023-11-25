@@ -22,7 +22,7 @@ func TestTokenizeSimple(t *testing.T) {
 
 	tokens, _ := tokenize(query)
 	expected := []token{
-		{sel, nil},
+		{select_, nil},
 		{star, nil},
 		{from, nil},
 		{ident, "c"},
@@ -48,7 +48,7 @@ func TestTokenizeSimpleQueryWithAnd(t *testing.T) {
 
 	tokens, _ := tokenize(query)
 	expected := []token{
-		{sel, nil},
+		{select_, nil},
 		{star, nil},
 		{from, nil},
 		{ident, "c"},
@@ -80,7 +80,7 @@ func TestTokenizeSimpleQueryWithOr(t *testing.T) {
 
 	tokens, _ := tokenize(query)
 	expected := []token{
-		{sel, nil},
+		{select_, nil},
 		{star, nil},
 		{from, nil},
 		{ident, "c"},

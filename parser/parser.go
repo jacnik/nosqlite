@@ -4,14 +4,14 @@ import (
 	"strconv"
 )
 
-type tokenType byte
+type tokenKind byte
 
 const (
-	text tokenType = iota
+	text tokenKind = iota
 	integer
 	float
 	ident
-	sel // select
+	select_
 	from
 	where
 	comma
@@ -30,8 +30,8 @@ const (
 )
 
 type token struct {
-	tokenType tokenType
-	value     any
+	kind  tokenKind
+	value any
 }
 
 func tokenize(query string) ([]token, error) {
@@ -63,7 +63,7 @@ func tokenize(query string) ([]token, error) {
 
 		switch identifier {
 		case "SELECT":
-			return token{sel, nil}
+			return token{select_, nil}
 		case "FROM":
 			return token{from, nil}
 		case "WHERE":
@@ -188,19 +188,19 @@ const (
 	Lt OpType = '<'
 )
 
-type InstructionType byte
+type InstructionKind byte
 
 const (
-	Push InstructionType = 'p'
-	And  InstructionType = 'a'
-	Or   InstructionType = 'o'
+	Push InstructionKind = 'p'
+	And  InstructionKind = 'a'
+	Or   InstructionKind = 'o'
 )
 
 type Instruction struct {
-	Type     InstructionType
-	QueryKey string
-	Op       OpType
-	QueryVal interface{}
+	Kind InstructionKind
+	Key  string
+	Op   OpType
+	Val  interface{}
 }
 
 type Program struct {
@@ -217,11 +217,11 @@ type Program struct {
 func Parse(query string) (Program, error) {
 	readSelection := func(tokens []token) (int, int) {
 		// TODO implement selection
-		if tokens[0].tokenType != sel {
+		if tokens[0].kind != select_ {
 			return 0, 0
 		}
 		for i := 1; i < len(tokens); i++ {
-			if tokens[i].tokenType == from {
+			if tokens[i].kind == from {
 				return 0, i + 1
 			}
 		}
@@ -229,13 +229,13 @@ func Parse(query string) (Program, error) {
 		return 0, 0
 	}
 	readContainerAlias := func(tokens []token, i int) (string, int) {
-		if tokens[i].tokenType == ident {
+		if tokens[i].kind == ident {
 			return tokens[i].value.(string), i + 1
 		}
 		return "", i
 	}
 	readWhereClause := func(tokens []token, i int, containerAlias string) ([]Instruction, int) {
-		if tokens[i].tokenType != where {
+		if tokens[i].kind != where {
 			return nil, i
 		}
 
@@ -248,26 +248,26 @@ func Parse(query string) (Program, error) {
 			if tokens[i] == (token{ident, containerAlias}) {
 				i++
 			}
-			if tokens[i].tokenType == dot {
+			if tokens[i].kind == dot {
 				keyBuilder += levelSep
 			}
-			if tokens[i].tokenType == ident {
+			if tokens[i].kind == ident {
 				keyBuilder += tokens[i].value.(string)
 			}
-			if tokens[i].tokenType == eq {
+			if tokens[i].kind == eq {
 				op = Eq
 			}
-			if tokens[i].tokenType == gt {
+			if tokens[i].kind == gt {
 				op = Gt
 			}
-			if tokens[i].tokenType == text || tokens[i].tokenType == float {
+			if tokens[i].kind == text || tokens[i].kind == float {
 				clauses = append(clauses, Instruction{cmd, keyBuilder, op, tokens[i].value})
 				keyBuilder = ""
 			}
-			if tokens[i].tokenType == and {
+			if tokens[i].kind == and {
 				cmd = And
 			}
-			if tokens[i].tokenType == or {
+			if tokens[i].kind == or {
 				cmd = Or
 			}
 		}

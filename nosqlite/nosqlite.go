@@ -531,10 +531,10 @@ func QueryIndex(index *IndexT, query string) {
 
 	stack := refStack{}
 	for _, instruction := range program.Instructions {
-		queryType := getQueryType(instruction.QueryVal) // TODO add type info directly from parser
-		refs := getFileRefs(index, instruction.QueryKey, instruction.Op, instruction.QueryVal, queryType)
+		queryType := getQueryType(instruction.Val) // TODO add type info directly from parser
+		refs := getFileRefs(index, instruction.Key, instruction.Op, instruction.Val, queryType)
 
-		switch instruction.Type {
+		switch instruction.Kind {
 		case parser.Push:
 			stack.Push(refs)
 		case parser.And:
