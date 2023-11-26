@@ -1,17 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"cmp"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/jacnik/bitflags"
 	"github.com/jacnik/nosqlite/parser"
@@ -549,6 +553,61 @@ func QueryIndex(index *IndexT, query string) {
 	fmt.Printf("Refs:\n%v\n", refsToSlice(stack.Pop()))
 }
 
+// https://github.com/x-motemen/gore/blob/main/cli/run.go
+func cmdOpen(cmd string) (filename string, path string, index IndexT, err error) {
+	// strings.Split(cmd, )
+	fields := strings.Fields(cmd)
+	if len(fields) != 2 {
+		// Custom errors -> https://yourbasic.org/golang/create-error/
+		return "", "", nil, errors.New("Wrong number of parameters to .open") // TODO custom error end usage of .open cmd
+	}
+	path = fields[1]
+	filename = filepath.Base(path)
+	index = ReadIndex(filepath.Dir(path))
+	err = nil
+	return
+}
+
+func RunCli() int {
+	/* Commands: .help .exit .open .database */
+	reader := bufio.NewReader(os.Stdin)
+	version := "0.01"
+	fmt.Printf("NoSQLite version: %s\n", version)
+	fmt.Println("Enter \".help\" for usage hints.")
+
+	// var currIndex IndexT
+	var currName string
+	var currPath string
+
+	for {
+		fmt.Print("nosqlite> ")
+		text, _ := reader.ReadString('\n')
+		// convert CRLF to LF
+		text = strings.Replace(text, "\n", "", -1)
+
+		if text == ".exit" {
+			return 0
+		}
+		if text == ".database" {
+			fmt.Printf("seq  name             file\n")
+			fmt.Printf("---  ---------------  --------------------------\n")
+			fmt.Printf("%-3d  %-15s  %-26s\n", 0, currName, currPath)
+			continue
+		}
+		if strings.HasPrefix(text, ".open") { //.open /workspaces/nosqlite/nosqlite/db/INDEX
+			name, path, _, err := cmdOpen(text)
+			if err != nil {
+				fmt.Printf("%s\n", err)
+			}
+			// currIndex = index
+			currName = name
+			currPath = path
+			continue
+		}
+		fmt.Printf("Unknown \"%s\"\n", text)
+	}
+}
+
 func main() {
 	// paths := []string{"./db/0", "./db/1"} // todo use listDir(dirPath)
 	// index := IndexFiles(paths)
@@ -556,8 +615,10 @@ func main() {
 	// err := SaveIndex(index, "./db")
 	// check(err)
 
-	index := ReadIndex("./db")
-	QueryIndex(&index, "")
+	os.Exit(RunCli())
+
+	// index := ReadIndex("./db")
+	// QueryIndex(&index, "")
 
 	// s := "SELECT *"
 	// fmt.Println(s[0:6])
